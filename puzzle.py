@@ -272,14 +272,17 @@ class Board(object):
         position = sr, sc = self.selected.position
         if action not in self.selected.get_possible_moves(self):
             ## Deselect orb; Effectively ending the turn
-            ## Includes the move '4' which is itself defined as \deselect\
-            ## Switch 4 to no-op
+            ## Includes the move '4' which is defined as \deselect\
+            ## Set illegal move to noop
+            ## This way only explicitly chosing 4 can terminate the turn
             if action==4:
                 self.selected = None
-                return False
-            else:
-                self.selected = None
                 return True
+            else:
+                ## noop is implicit - we want it to be contextual
+                # self.selected = None
+                # return True
+                return False
 
         if action==0: # left
             newpos = [sr, sc-1]
@@ -377,7 +380,7 @@ class Board(object):
 
 
     def refresh_orbs(self):
-        self.moves = 0
+        self.move_count = 1.0
         show_hold = self.show
         self.show = False
         self.selected = None
@@ -403,11 +406,12 @@ class Board(object):
 
         ## Selected represents the selected orb and the internal clock
         ## the clock 'ticks' down linearly towards 0, when the turn is ended
-        # selected = np.zeros(self.shape, dtype = np.float32) + self.move_count
-        selected = np.zeros(self.shape, dtype = np.float32)
+        selected = np.zeros(self.shape, dtype = np.float32) + self.move_count
+        # selected = np.zeros(self.shape, dtype = np.float32)
         if self.selected is not None:
             sr,sc = self.selected.position
-            selected[sr,sc] = self.move_count ## 2 instead of 1
+            # selected[sr,sc] = self.move_count ## 2 instead of 1
+            selected[sr, sc] = 2.0
 
 
         if flat:
