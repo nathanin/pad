@@ -19,6 +19,7 @@ The environment supports the following:
 - Implement basic movement, clearing, skyfall and cascade mechanics ( :heavy_check_mark: Sep 2, '17)
 - Implement a random agent and run experiments to generate baseline statistics ( :heavy_check_mark: Sep 2, '17)
 - Implement Deep Q Network learning agent (:heavy_check_mark: Sep 9 '17 )
+- Validate D-DQN implementation with OpenAI `gym` (:x: target: Sep 18 '17)
 - Perform time trials - moves/second, epochs/second (:x:)
 - Exceed random baseline performance with DQN agent ( :x: )
 - Implement dungeon floor progression with attacking and enemies ( :x: target: Oct '17 )
