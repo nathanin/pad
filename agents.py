@@ -11,8 +11,6 @@ https://github.com/asrivat1/DeepLearningVideoGames
 '''
 
 
-
-
 class History(object):
     def __init__(self, capacity=1024):
         self.capacity = capacity
@@ -90,10 +88,37 @@ class History(object):
         return states, actions, rewards, state_ps, is_ends
 
 
+    """ Debugging function: print some info about the history state """
+    def _print_memory(self):
+        actions = np.asarray(self.memory['action'])
+        actions = [(actions == k).sum()/float(self.n) for k in range(5)]
+
+        rewards = np.asarray(self.memory['reward'])
+        is_ends = np.asarray(self.memory['is_end'])
+
+        print '--------- Experience Summary ----------'
+        print 'Experience history with {} entries'.format(self.n)
+        print 'Actions distribution:\n\t0:{:2.3f}\n\t1:{:2.3f}\n\t2:{:2.3f}\n\t3:{:2.3f}\n\t4:{:2.3f}'.format(
+            actions[0],
+            actions[1],
+            actions[2],
+            actions[3],
+            actions[4], )
+        print 'Rewards: mean: {} min: {} max: {}'.format(
+            np.mean(rewards), rewards.min(), rewards.max() )
+        print 'Rewards non-0: {} mean: {} min: {} max: {}'.format(
+            (rewards!=0).sum(),
+            np.mean(rewards[rewards!=0]),
+            rewards[rewards!=0].min(),
+            rewards[rewards!=0].max() )
+        try:
+            print 'Terminal actions: {}'.format((is_ends == True).sum())
+        except:
+            print 'Teminal actions: None??'
+
+
 """
-
 Attempt at OOP
-
 """
 class BaseAgent(object):
     def __init__(self, board, n_moves=10):
@@ -125,10 +150,11 @@ class BaseAgent(object):
         self.board = newboard
 
 
-    def _eval_reward(self, move, illegal_move, previous_combo):
+    """ Experiment with mid-move and terminal move rewards """
+    def _eval_reward(self, move, terminal_move, previous_combo):
         ## We've reached the end of the game
-        if self.board.selected is None or move==self.n_moves:
-            do_break=True
+        # if self.board.selected is None:
+        if terminal_move:
 
             ## Outcome on board
             # r_t = self.board.eval_matches(no_clear=True)
@@ -136,23 +162,16 @@ class BaseAgent(object):
             ## Outcome with skyfall
             r_t, n_cleared = self.eval_outcome()
             # r_t *= n_cleared
-            r_t *= move
-
-            ## Provide some penalty for ending with an improper move?
-            # if illegal_move:
-            #     r_t = max(r_t-1, 0.0)
+            # r_t *= move
 
         else:
-            do_break=False
-            # combos = self.board.eval_matches(no_clear=True)
-            # delta_combo = combos - previous_combo
+            combos = self.board.eval_matches(no_clear=True)
+            delta_combo = combos - previous_combo
+            r_t = max(delta_combo, 0.0) + combos
             # previous_combo = combos
 
-            r_t = self.board.eval_matches(no_clear=True)
-            # r_t = delta_combo
-            # r_t = 0
 
-        return r_t, previous_combo, do_break
+        return r_t, previous_combo
 
 
 '''
@@ -186,11 +205,6 @@ class RandomAgent(BaseAgent):
 
 
 '''
-Not super sure what i'm doing here
-
-sorta referencing:
-https://github.com/devsisters/DQN-tensorflow/blob/master/dqn/agent.py
-
 Made heavy use of:
 https://github.com/awjuliani/DeepRL-Agents
 
@@ -226,11 +240,11 @@ class DoubleQAgent(BaseAgent):
         ## Some hyper params
         self.name = 'Dueling-DoubleQAgent'
         self.sample_mode = sample_mode
-        self.learning_rate = 0.0001
+        self.learning_rate = 1e-8
         self.history = History(capacity=memory)
         self.batch_size = batch_size
         self.global_step = 0
-        self.update_iter = 10
+        self.update_iter = 5
         self.tau = 0.001
 
         self.gamma = 0.99
@@ -259,18 +273,20 @@ class DoubleQAgent(BaseAgent):
 
     """ Action from onlineQ """
     def _sample_action(self, s_t, verbose=False):
-        observe_epsilon = 0.75
         if self.sample_mode == 'e_greedy':
             feed_dict = {self.onlineQ.state: s_t, self.onlineQ.keep_prob: 1.0}
             a_t, Qpred = self.sess.run([self.onlineQ.action_op, self.onlineQ.Qpred],
                 feed_dict=feed_dict)
 
             if np.random.rand(1)[0] < self.epsilon:
-                a_t = np.random.choice(range(self.n_actions))
+                # a_t = np.random.choice(range(self.n_actions))
+
                 ## Restrict to legal actions
                 action_space = self.board.selected.get_possible_moves(self.board)
-                a_t_legal = np.random.choice(action_space)
-                a_t = np.random.choice([a_t, a_t_legal])
+                action_space.append(4)
+                a_t = np.random.choice(action_space)
+
+                # a_t = np.random.choice([a_t, a_t_legal])
             else:
                 a_t = a_t[0]
 
@@ -281,14 +297,20 @@ class DoubleQAgent(BaseAgent):
             a_t = a_t[0]
             # if verbose:
             #     print 'MOVE {} (bayes) Qt a_t: {}'.format(self.board.move_count, a_t),
+        else:
+            print '{} not recognized'.format(self.sample_mode)
+            a_t = None
+        #/end if
         return a_t
 
 
     """ Utility procedure to fill up memory """
     def observe(self, pause_time=0, verbose=False):
+        print 'Observing {} sampling mode'.format(self.sample_mode)
         n_moves = self.n_moves
 
         ## Set epsilon-greedy pretraining condition
+        ## Bayesian preconditioning seems to give unbalanced initialization
         store_mode = self.sample_mode
         store_epsilon = self.epsilon
         self.sample_mode = 'e_greedy'
@@ -302,7 +324,7 @@ class DoubleQAgent(BaseAgent):
             move = 0
             total_reward = 0
             previous_combo = 0
-            while self.board.selected is not None and move <= n_moves:
+            while self.board.selected is not None:
                 ## Feed history
                 move += 1
                 s_t = self.board.board_2_state()
@@ -311,15 +333,15 @@ class DoubleQAgent(BaseAgent):
                 a_t = self._sample_action(s_t)
 
                 ## Observe altered state(t+1)
-                illegal_move = self.board.move_orb(a_t)
+                terminal_move = self.board.move_orb(a_t)
                 s_t1 = self.board.board_2_state()
 
-                r_t, previous_combo, do_break = self._eval_reward(
-                    move, illegal_move, previous_combo)
+                r_t, previous_combo = self._eval_reward(
+                    move, terminal_move, previous_combo)
 
-                self.history.store_state(s_t, a_t, r_t, s_t1, do_break)
+                self.history.store_state(s_t, a_t, r_t, s_t1, terminal_move)
 
-                if do_break:
+                if terminal_move:
                     break
         ## Restore settings
         self.sample_mode = store_mode
@@ -340,7 +362,7 @@ class DoubleQAgent(BaseAgent):
         total_reward = 0
         previous_combo = 0
         loss = None
-        while self.board.selected is not None and move <= n_moves:
+        while self.board.selected is not None:
             ## Feed history new observations
             move += 1
             self.global_step += 1
@@ -350,11 +372,10 @@ class DoubleQAgent(BaseAgent):
             a_t = self._sample_action(s_t, verbose=verbose)
 
             ## Evaluate reward and next state
-            illegal_move = self.board.move_orb(a_t)
+            terminal_move = self.board.move_orb(a_t)
             s_t1 = self.board.board_2_state()
-            r_t, previous_combo, do_break = self._eval_reward(
-                move, illegal_move, previous_combo)
-            self.history.store_state(s_t, a_t, r_t, s_t1, do_break)
+            r_t, previous_combo = self._eval_reward(move, terminal_move, previous_combo)
+            self.history.store_state(s_t, a_t, r_t, s_t1, terminal_move)
 
             ## Minibatch update:
             s_j, a_j, r_j, s_j1, is_end = self.history.minibatch(self.batch_size)
@@ -365,9 +386,14 @@ class DoubleQAgent(BaseAgent):
 
             ## Sample from the full model for updating -- this is like test time
             ## Maybe
-            feed_dict = {self.targetQ.state: s_j1, self.targetQ.keep_prob: 1.0}
+            if self.sample_mode == 'e_greedy':
+                eps_use = 1.0
+            elif self.sample_mode == 'bayes':
+                eps_use = self.epsilon
+
+            feed_dict = {self.targetQ.state: s_j1, self.targetQ.keep_prob: eps_use}
             q_j = self.sess.run(self.targetQ.Qpred, feed_dict=feed_dict)
-            feed_dict = {self.onlineQ.state: s_j1, self.onlineQ.keep_prob: 1.0}
+            feed_dict = {self.onlineQ.state: s_j1, self.onlineQ.keep_prob: eps_use}
             a_max = self.sess.run(self.onlineQ.action_op, feed_dict=feed_dict)
 
             ## nextQ = targetQ(mainQ_max)
@@ -381,7 +407,7 @@ class DoubleQAgent(BaseAgent):
             feed_dict = {self.onlineQ.nextQ: nextQ,
                          self.onlineQ.state: s_j,
                          self.onlineQ.actions: a_j,
-                         self.onlineQ.keep_prob: 1.0 }
+                         self.onlineQ.keep_prob: eps_use }
             _, loss, delta = self.sess.run([self.onlineQ.optimize_op,
                                           self.onlineQ.loss_op,
                                           self.onlineQ.delta],
@@ -394,9 +420,10 @@ class DoubleQAgent(BaseAgent):
                 models.updateTarget(self.targetOps, self.sess)
 
 
-            if do_break:
+            if terminal_move:
                 if verbose:
-                    print 'moves: {} r_t = {} (end-turn {})'.format(move, r_t, illegal_move)
+                    print 'moves: {} r_t = {} (mode: {}) (end-turn {})'.format(
+                        move, r_t, self.sample_mode, terminal_move)
 
                 break
 
@@ -533,13 +560,8 @@ class DeepQAgent(BaseAgent):
                 action_space = self.board.selected.get_possible_moves(self.board)
                 a_t_legal = np.random.choice(action_space)
                 a_t = np.random.choice([a_t, a_t_legal])
-                if verbose:
-                    print 'move {} ep a_t: {}'.format(
-                        move, a_t),
             else:
                 a_t = a_t[0]
-                if verbose:
-                    print 'move {} Qt a_t: {}'.format(move, a_t),
 
             illegal_move = self.board.move_orb(a_t)
             s_t1 = self.board.board_2_state()
@@ -575,6 +597,8 @@ class DeepQAgent(BaseAgent):
             #     print 'delta: {}, loss: {}'.format(delta, loss)
 
             if verbose:
+                print 'move {} ep a_t: {} (mode {})'.format(
+                    move, a_t, self.sample_mode),
                 print 'loss= {}, r_t = {}'.format(loss, r_t)
 
             if do_break:
@@ -598,7 +622,3 @@ class DeepQAgent(BaseAgent):
 
         combos, n_cleared = self.eval_outcome()
         return combos, n_cleared, moves
-
-
-    def nothing():
-        pass

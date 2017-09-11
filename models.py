@@ -37,14 +37,20 @@ class DuelingQ(object):
     def __init__(self, board, action_dim, learning_rate):
         board_row, board_col = board.shape
 
-        self.weights = {'input': weight_variable([2, 2, 2, 128]),
-                   'hidden1': weight_variable([2, 2, 128, 256]),
-                   'hidden2': weight_variable([1, 1, 256, 512]),
-                   'advantage': weight_variable([2048, 128]),
-                   'advantage2': weight_variable([128, action_dim]),
-                   'value': weight_variable([2048, 128]),
-                   'value2': weight_variable([128, 1]),}
+        self.weights = {'input': weight_variable([3, 3, 2, 128]),
+                   'hidden1': weight_variable([1, 1, 128, 256]),
+                   'hidden2': weight_variable([2, 2, 256, 512]),
+                   'advantage': weight_variable([256, action_dim]),
+                #    'advantage2': weight_variable([128, action_dim]),
+                   'value': weight_variable([256, 1]),}
+                #    'value2': weight_variable([128, 1]),}
                 #    'output': weight_variable([512, action_dim])}
+
+        self.biases = {'input': bias_variable([128]),
+                       'hidden1': bias_variable([256]),
+                       'hidden2': bias_variable([512]),
+                       'advantage': bias_variable([action_dim]),
+                       'value': bias_variable([1]), }
 
         self.state = tf.placeholder('float', [None, board_row, board_col, 2])
         print 'state: ', self.state.get_shape()
@@ -54,36 +60,36 @@ class DuelingQ(object):
         ## Net definition
         net = tf.nn.conv2d(
             self.state, self.weights['input'],
-            strides=[1, 1, 1, 1],
+            strides=[1, 2, 2, 1],
             padding='VALID')
-        # net = tf.nn.bias_add(net, biases['input'])
+        net = tf.nn.bias_add(net, self.biases['input'])
+        # net = tf.nn.relu(net)
         print 'net input: ', net.get_shape()
 
         net = tf.nn.conv2d(
             net, self.weights['hidden1'],
-            strides=[1, 2, 2, 1],
+            strides=[1, 1, 1, 1],
             padding='VALID')
-        # net = tf.nn.bias_add(net, biases['hidden1'])
+        net = tf.nn.bias_add(net, self.biases['hidden1'])
+        # net = tf.nn.relu(net)
         print 'net hidden1: ', net.get_shape()
 
         net = tf.nn.conv2d(
             net, self.weights['hidden2'],
             strides=[1, 1, 1, 1],
             padding='VALID')
+        net = tf.nn.bias_add(net, self.biases['hidden2'])
+        # net = tf.nn.relu(net)
         # net = tf.nn.bias_add(net, biases['hidden1'])
         print 'net hidden2: ', net.get_shape()
 
         net = tf.contrib.layers.flatten(net)
-        net = tf.nn.dropout(net, self.keep_prob)
+        # net = tf.nn.dropout(net, self.keep_prob)
 
         ## Split advantage and value functions:
-        # adv_split, val_split = tf.split(net, 2, 3)
-        # adv_split = tf.Variable(net.get_shape())
-        # val_split = tf.Variable(net.get_shape())
-        # adv_split.assign(net)
-        # val_split.assign(net)
-        adv_split = net
-        val_split = net
+        adv_split, val_split = tf.split(net, 2, 1)
+        # adv_split = net
+        # val_split = net
 
         # adv_split = tf.contrib.layers.flatten(adv_split)
         # val_split = tf.contrib.layers.flatten(val_split)
@@ -91,15 +97,22 @@ class DuelingQ(object):
         print 'val_split flat: ', val_split.get_shape()
 
         ## Dropout to simulate a Bayesian process
-        # adv_split = tf.nn.dropout(adv_split, self.keep_prob)
-        # val_split = tf.nn.dropout(val_split, self.keep_prob)
+        adv_split = tf.nn.dropout(adv_split, self.keep_prob)
+        val_split = tf.nn.dropout(val_split, self.keep_prob)
 
-        adv_split = tf.nn.relu(tf.matmul(adv_split, self.weights['advantage']))
-        adv_split = tf.nn.relu(tf.matmul(adv_split, self.weights['advantage2']))
-        val_split = tf.nn.relu(tf.matmul(val_split, self.weights['value']))
-        val_split = tf.nn.relu(tf.matmul(val_split, self.weights['value2']))
-        print 'value: ', val_split.get_shape()
+        # adv_split = tf.nn.relu(tf.matmul(adv_split, self.weights['advantage']))
+        adv_split = tf.matmul(adv_split, self.weights['advantage'])
+        # adv_split = tf.nn.relu(tf.matmul(adv_split, self.weights['advantage2']))
+        adv_split = tf.nn.bias_add(adv_split, self.biases['advantage'])
+        adv_split = tf.nn.relu(adv_split)
         print 'adv: ', adv_split.get_shape()
+
+        # val_split = tf.nn.relu(tf.matmul(val_split, self.weights['value']))
+        val_split = tf.matmul(val_split, self.weights['value'])
+        # val_split = tf.nn.relu(tf.matmul(val_split, self.weights['value2']))
+        val_split = tf.nn.bias_add(val_split, self.biases['value'])
+        val_split = tf.nn.relu(val_split)
+        print 'value: ', val_split.get_shape()
 
         # net = tf.nn.relu(tf.matmul(net, weights['hidden3']) + biases['hidden3'])
         # print 'net combo: ', net.get_shape()
@@ -138,6 +151,7 @@ class DuelingQ(object):
         # self.loss_op = tf.reduce_mean(clipped_error(self.delta))
         self.loss_op = tf.reduce_mean(self.delta)
         print 'loss: ', self.loss_op.get_shape()
+
         # self.optimize_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss_op)
         self.optimize_op = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(self.loss_op)
         self.init_op = tf.global_variables_initializer()

@@ -29,19 +29,28 @@ def control_loop(events):
 
 def run_loop(agent, n_steps=25):
     print 'Entering run_loop'
+    epsilon_hold = agent.epsilon
+
+    if agent.sample_mode == 'e_greedy':
+        agent.epsilon = 0.0
+    elif agent.sample_mode == 'bayes':
+        agent.epsilon = 1.0
+
     for step in range(n_steps):
         if agent.board.show:
             control_loop(pygame.event.get())
 
-        time.sleep(1)
+        time.sleep(0.25)
         combos, cleared, moves = agent.play()
 
         print 'Step: {} Combos: {} Cleared: {} Moves: {}'.format(
             step, combos, cleared, moves)
 
+    ## Reinstate eps
+    agent.epsilon = epsilon_hold
 
 
-def train_loop(agent, n_steps=100000):
+def train_loop(agent, n_steps=150000):
     ## History is later
     # agent.initialize_history()
 
@@ -49,8 +58,9 @@ def train_loop(agent, n_steps=100000):
     print 'Entering train_loop'
     reward = [0]
     moves = [0]
-    print_iter = 250
+    print_iter = 500
     anneal_iter = 3500
+    history_iter = 500
     memory_iter = 10000
     loop_time = time.time()
     for step in range(n_steps):
@@ -58,29 +68,41 @@ def train_loop(agent, n_steps=100000):
             control_loop(pygame.event.get())
 
         if step % print_iter == 0:
-            print ''*5
+            print '\n'*5
             print '-----------------------------------------'
             r_step, moves_step = agent.train(verbose=True)
-            print 'Step: {} mean_end_reward: {} mean_moves: {} epsilon: {} time: {}'.format(
-                step, np.mean(reward), np.mean(moves), agent.epsilon, time.time()-loop_time)
+            try:
+                print 'Step: {} mean_end_reward: {} mean_moves: {} epsilon: {} time: {}'.format(
+                    step, np.mean(reward[step-1000:]),
+                    np.mean(moves[step-1000:]),
+                    agent.epsilon, time.time()-loop_time)
+            except:
+                print 'Step: {} mean_end_reward: {} mean_moves: {} epsilon: {} time: {}'.format(
+                    step, np.mean(reward),
+                    np.mean(moves),
+                    agent.epsilon, time.time()-loop_time)
+
+            print 'Step: {} memory contents summary:'.format(step)
+            agent.history._print_memory()
+            print '-----------------------------------------'
             loop_time = time.time()
         else:
             r_step, moves_step = agent.train()
 
-        ## E-greedy exploration
-        # if step % anneal_iter == 0:
-        #     print 'annealing epsilon..',
-        #     # agent.epsilon *= 500./(step+1)
-        #     agent.epsilon *= 0.9
-        #     agent.epsilon = max(0.01, agent.epsilon)
-        #     print 'epsilon = ', agent.epsilon
-
-        ## Bayesian exploration
         if step % anneal_iter == 0:
-            print 'annealing epsilon..',
-            agent.epsilon *= 1.15
-            agent.epsilon = min(0.9, agent.epsilon)
-            print 'epsilon = ', agent.epsilon
+            print 'step: {} annealing epsilon..'.format(step),
+            if agent.sample_mode == 'e_greedy':
+                ## E-greedy exploration
+                agent.epsilon *= 0.9
+                agent.epsilon = max(0.1, agent.epsilon)
+            elif agent.sample_mode == 'bayes':
+                ## Bayesian exploration
+                agent.epsilon *= 1.05
+                agent.epsilon = min(0.75, agent.epsilon)
+
+        # if step % history_iter == 0:
+        #     print 'step: {} memory contents summary:'.format(step)
+        #     agent.history._print_memory()
 
         reward.append(r_step)
         moves.append(moves_step)
@@ -88,13 +110,13 @@ def train_loop(agent, n_steps=100000):
 
 if __name__ == '__main__':
     shape = [5,6]
-    moves = 50
+    moves = 35
     board = puzzle.Board(shape=shape, max_moves=moves, show=False)
     # agent = agents.RandomAgent(board, n_moves=10)
 
     # agent = agents.DeepQAgent(board, n_moves=20, batch_size=16, memory=5400)
-    agent = agents.DoubleQAgent(board, n_moves=moves, batch_size=24, memory=5400,
-                                sample_mode='bayes')
+    agent = agents.DoubleQAgent(board, n_moves=moves, batch_size=32, memory=7200,
+                                sample_mode='e_greedy')
 
     print 'Max moves: ', agent.n_moves
     agent.observe()

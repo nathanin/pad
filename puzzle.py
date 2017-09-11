@@ -270,19 +270,21 @@ class Board(object):
         # take care of legal moves somewhere else;
         # if we get here assume the move is legal;
         position = sr, sc = self.selected.position
+        ## Update internal clock
+        self.move_count -= self.move_delta
         if action not in self.selected.get_possible_moves(self):
-            ## Deselect orb; Effectively ending the turn
-            ## Includes the move '4' which is defined as \deselect\
-            ## Set illegal move to noop
             ## This way only explicitly chosing 4 can terminate the turn
-            if action==4:
+            if action==4 or self.move_count<=0:
+                ## Deselect orb; Effectively ending the turn
                 self.selected = None
                 return True
             else:
+                ## Set illegal move to noop
                 ## noop is implicit - we want it to be contextual
-                # self.selected = None
-                # return True
-                return False
+                if self.move_count <= 0:
+                    return True
+                else:
+                    return False
 
         if action==0: # left
             newpos = [sr, sc-1]
@@ -308,10 +310,10 @@ class Board(object):
         if self.show:
             self.draw_board(show_selected=show_selected)
 
-        ## Update internal clock
-        self.move_count -= self.move_delta
-
-        return False
+        if self.move_count <= 0:
+            return True
+        else:
+            return False
 
 
     def draw_board(self, show_selected=True):
@@ -406,12 +408,12 @@ class Board(object):
 
         ## Selected represents the selected orb and the internal clock
         ## the clock 'ticks' down linearly towards 0, when the turn is ended
-        selected = np.zeros(self.shape, dtype = np.float32) + self.move_count
+        selected = np.zeros(self.shape, dtype = np.float32) #+ self.move_count
         # selected = np.zeros(self.shape, dtype = np.float32)
         if self.selected is not None:
             sr,sc = self.selected.position
-            # selected[sr,sc] = self.move_count ## 2 instead of 1
-            selected[sr, sc] = 2.0
+            selected[sr,sc] = self.move_count ## 2 instead of 1
+            # selected[sr, sc] = 2.0
 
 
         if flat:
@@ -426,11 +428,14 @@ class Board(object):
         return state
 
 
-    '''
+
+    """
+
     Example run loop
 
-    Usually we'll want to move this loop outside and NOT use this function
-    '''
+    I've re-implemented this loop in `actor.py`
+
+    """
     def run(self):
         self.screen = pygame.display.set_mode(self.size)
         self.draw_board()
@@ -449,6 +454,7 @@ class Board(object):
             while play:
                 self._select_random()
                 for _ in range(n_moves):
+                    # Sample from legal moves
                     moves = self.selected.get_possible_moves(self)
                     self.move_orb(direction=np.random.choice(moves))
                     # self.draw_board()
