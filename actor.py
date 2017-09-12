@@ -50,7 +50,7 @@ def run_loop(agent, n_steps=25):
     agent.epsilon = epsilon_hold
 
 
-def train_loop(agent, n_steps=150000):
+def train_loop(agent, n_steps=10000):
     ## History is later
     # agent.initialize_history()
 
@@ -58,9 +58,8 @@ def train_loop(agent, n_steps=150000):
     print 'Entering train_loop'
     reward = [0]
     moves = [0]
-    print_iter = 500
-    anneal_iter = 3500
-    history_iter = 500
+    print_iter = history_iter = 250
+    anneal_iter = 500
     memory_iter = 10000
     loop_time = time.time()
     for step in range(n_steps):
@@ -93,12 +92,13 @@ def train_loop(agent, n_steps=150000):
             print 'step: {} annealing epsilon..'.format(step),
             if agent.sample_mode == 'e_greedy':
                 ## E-greedy exploration
-                agent.epsilon *= 0.9
+                agent.epsilon *= 0.7
                 agent.epsilon = max(0.1, agent.epsilon)
             elif agent.sample_mode == 'bayes':
                 ## Bayesian exploration
-                agent.epsilon *= 1.05
-                agent.epsilon = min(0.75, agent.epsilon)
+                agent.epsilon *= 1.15
+                agent.epsilon = min(0.8, agent.epsilon)
+            print 'eps = {}'.format(agent.epsilon),
 
         # if step % history_iter == 0:
         #     print 'step: {} memory contents summary:'.format(step)
@@ -115,14 +115,21 @@ if __name__ == '__main__':
     # agent = agents.RandomAgent(board, n_moves=10)
 
     # agent = agents.DeepQAgent(board, n_moves=20, batch_size=16, memory=5400)
-    agent = agents.DoubleQAgent(board, n_moves=moves, batch_size=32, memory=7200,
-                                sample_mode='e_greedy')
+    agent = agents.DoubleQAgent(board,
+        n_moves=moves,
+        batch_size=24,
+        memory=10000,
+        sample_mode='bayes',
+        reward_type='distance')
 
     print 'Max moves: ', agent.n_moves
     agent.observe()
     train_loop(agent)
 
     ## Replace board so we can watch some play
-    board = puzzle.Board(shape=shape, max_moves=moves, show=True)
+    board = puzzle.Board(shape=shape,
+        max_moves=moves,
+        show=True,
+        sleep_time=0.05)
     agent.swap_board(board)
     run_loop(agent)

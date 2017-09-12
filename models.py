@@ -37,18 +37,18 @@ class DuelingQ(object):
     def __init__(self, board, action_dim, learning_rate):
         board_row, board_col = board.shape
 
-        self.weights = {'input': weight_variable([3, 3, 2, 128]),
-                   'hidden1': weight_variable([1, 1, 128, 256]),
-                   'hidden2': weight_variable([2, 2, 256, 512]),
-                   'advantage': weight_variable([256, action_dim]),
+        self.weights = {'input': weight_variable([3, 3, 2, 32]),
+                   'hidden1': weight_variable([1, 1, 32, 32]),
+                   'hidden2': weight_variable([2, 2, 32, 32]),
+                   'advantage': weight_variable([32, action_dim]),
                 #    'advantage2': weight_variable([128, action_dim]),
-                   'value': weight_variable([256, 1]),}
+                   'value': weight_variable([32, 1]),}
                 #    'value2': weight_variable([128, 1]),}
                 #    'output': weight_variable([512, action_dim])}
 
-        self.biases = {'input': bias_variable([128]),
-                       'hidden1': bias_variable([256]),
-                       'hidden2': bias_variable([512]),
+        self.biases = {'input': bias_variable([32]),
+                       'hidden1': bias_variable([32]),
+                       'hidden2': bias_variable([32]),
                        'advantage': bias_variable([action_dim]),
                        'value': bias_variable([1]), }
 
@@ -62,34 +62,33 @@ class DuelingQ(object):
             self.state, self.weights['input'],
             strides=[1, 2, 2, 1],
             padding='VALID')
-        net = tf.nn.bias_add(net, self.biases['input'])
-        # net = tf.nn.relu(net)
+        # net = tf.nn.bias_add(net, self.biases['input'])
+        net = tf.nn.relu(net)
         print 'net input: ', net.get_shape()
 
         net = tf.nn.conv2d(
             net, self.weights['hidden1'],
             strides=[1, 1, 1, 1],
             padding='VALID')
-        net = tf.nn.bias_add(net, self.biases['hidden1'])
-        # net = tf.nn.relu(net)
+        # net = tf.nn.bias_add(net, self.biases['hidden1'])
+        net = tf.nn.relu(net)
         print 'net hidden1: ', net.get_shape()
 
         net = tf.nn.conv2d(
             net, self.weights['hidden2'],
             strides=[1, 1, 1, 1],
             padding='VALID')
-        net = tf.nn.bias_add(net, self.biases['hidden2'])
-        # net = tf.nn.relu(net)
-        # net = tf.nn.bias_add(net, biases['hidden1'])
+        # net = tf.nn.bias_add(net, self.biases['hidden2'])
+        net = tf.nn.relu(net)
         print 'net hidden2: ', net.get_shape()
 
         net = tf.contrib.layers.flatten(net)
-        # net = tf.nn.dropout(net, self.keep_prob)
+        net = tf.nn.dropout(net, self.keep_prob)
 
         ## Split advantage and value functions:
-        adv_split, val_split = tf.split(net, 2, 1)
-        # adv_split = net
-        # val_split = net
+        # adv_split, val_split = tf.split(net, 2, 1)
+        adv_split = net
+        val_split = net
 
         # adv_split = tf.contrib.layers.flatten(adv_split)
         # val_split = tf.contrib.layers.flatten(val_split)
@@ -97,29 +96,21 @@ class DuelingQ(object):
         print 'val_split flat: ', val_split.get_shape()
 
         ## Dropout to simulate a Bayesian process
-        adv_split = tf.nn.dropout(adv_split, self.keep_prob)
-        val_split = tf.nn.dropout(val_split, self.keep_prob)
+        # adv_split = tf.nn.dropout(adv_split, self.keep_prob)
+        # val_split = tf.nn.dropout(val_split, self.keep_prob)
 
-        # adv_split = tf.nn.relu(tf.matmul(adv_split, self.weights['advantage']))
         adv_split = tf.matmul(adv_split, self.weights['advantage'])
-        # adv_split = tf.nn.relu(tf.matmul(adv_split, self.weights['advantage2']))
-        adv_split = tf.nn.bias_add(adv_split, self.biases['advantage'])
-        adv_split = tf.nn.relu(adv_split)
         print 'adv: ', adv_split.get_shape()
 
-        # val_split = tf.nn.relu(tf.matmul(val_split, self.weights['value']))
         val_split = tf.matmul(val_split, self.weights['value'])
-        # val_split = tf.nn.relu(tf.matmul(val_split, self.weights['value2']))
-        val_split = tf.nn.bias_add(val_split, self.biases['value'])
-        val_split = tf.nn.relu(val_split)
         print 'value: ', val_split.get_shape()
-
-        # net = tf.nn.relu(tf.matmul(net, weights['hidden3']) + biases['hidden3'])
-        # print 'net combo: ', net.get_shape()
 
         adv_mean = tf.reduce_mean(adv_split, 1, keep_dims=True)
         print 'adv_mean: ', adv_mean.get_shape()
+
+        ## Single stream
         # self.Qpred = tf.matmul(net, weights['output'])# + biases['output']
+        ## Double stream
         self.Qpred = val_split + (adv_split - adv_mean)
         print 'net output: ', self.Qpred.get_shape()
 
@@ -137,10 +128,7 @@ class DuelingQ(object):
 
         ## Zero the others
         self.Q = tf.reduce_sum(self.Qpred * self.actions_onehot, 1)
-        # self.Q = self.Qpred * self.actions_onehot
         print 'Q: ', self.Q.get_shape()
-        # self.nextQ_times_onehot = self.nextQ * self.actions_onehot
-        # print 'nextQ_times_onehot: ', self.nextQ_times_onehot.get_shape()
         self.delta = tf.square(self.nextQ - self.Q)
         print 'delta: ', self.delta.get_shape()
 
@@ -149,9 +137,9 @@ class DuelingQ(object):
         print 'action: ', self.action_op.get_shape()
         # self.loss_op = tf.reduce_sum(self.delta)
         # self.loss_op = tf.reduce_mean(clipped_error(self.delta))
-        self.loss_op = tf.reduce_mean(self.delta)
+        self.loss_op = tf.reduce_sum(clipped_error(self.delta))
         print 'loss: ', self.loss_op.get_shape()
 
-        # self.optimize_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss_op)
-        self.optimize_op = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(self.loss_op)
+        self.optimize_op = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss_op)
+        # self.optimize_op = tf.train.RMSPropOptimizer(learning_rate=learning_rate).minimize(self.loss_op)
         self.init_op = tf.global_variables_initializer()

@@ -121,9 +121,10 @@ class History(object):
 Attempt at OOP
 """
 class BaseAgent(object):
-    def __init__(self, board, n_moves=10):
+    def __init__(self, board, n_moves=10, reward_type='combo'):
         self.board = board
         self.n_moves = n_moves
+        self.reward_type = reward_type
 
         ## Actions - left, up, right, down, stop
         self.n_actions = 5
@@ -150,28 +151,36 @@ class BaseAgent(object):
         self.board = newboard
 
 
+    def _distance_reward(self, position, terminal_move):
+        xb, yb = self.board.shape
+        max_dist = np.sqrt(xb**2 + yb**2)
+        x,y = position
+        # if terminal_move:
+        r_t = np.sqrt(x**2 + y**2)/max_dist #+ self.board.move_count
+        # else:
+        #     r_t = 0
+
+        return r_t
+
+    def _combo_reward(self, terminal_move):
+        if terminal_move:
+            r_t, _ = self.eval_outcome()
+        else:
+            r_t = 0
+
+        return r_t
+
     """ Experiment with mid-move and terminal move rewards """
-    def _eval_reward(self, move, terminal_move, previous_combo):
+    def _eval_reward(self, terminal_move, position=None):
         ## We've reached the end of the game
         # if self.board.selected is None:
-        if terminal_move:
+        if self.reward_type == 'combo':
+            r_t = self._combo_reward(terminal_move)
+        elif self.reward_type == 'distance':
+            assert position is not None, 'Position cannot be None for distance reward'
+            r_t = self._distance_reward(position, terminal_move)
 
-            ## Outcome on board
-            # r_t = self.board.eval_matches(no_clear=True)
-
-            ## Outcome with skyfall
-            r_t, n_cleared = self.eval_outcome()
-            # r_t *= n_cleared
-            # r_t *= move
-
-        else:
-            combos = self.board.eval_matches(no_clear=True)
-            delta_combo = combos - previous_combo
-            r_t = max(delta_combo, 0.0) + combos
-            # previous_combo = combos
-
-
-        return r_t, previous_combo
+        return r_t
 
 
 '''
@@ -235,23 +244,31 @@ In such case what is the optimization?
 '''
 
 class DoubleQAgent(BaseAgent):
-    def __init__(self, board, n_moves=50, batch_size=16, memory=2048, sample_mode='bayes'):
-        super(DoubleQAgent, self).__init__(board, n_moves)
+    def __init__(self,
+                board,
+                n_moves=50,
+                batch_size=16,
+                memory=2048,
+                sample_mode='bayes',
+                reward_type='combo'):
+        super(DoubleQAgent, self).__init__(board, n_moves, reward_type)
         ## Some hyper params
         self.name = 'Dueling-DoubleQAgent'
         self.sample_mode = sample_mode
-        self.learning_rate = 1e-8
+        self.learning_rate = 1e-9
+        self.n_bootstrap = 50
         self.history = History(capacity=memory)
         self.batch_size = batch_size
         self.global_step = 0
-        self.update_iter = 5
-        self.tau = 0.001
+        self.update_iter = 100
+        self.tau = 0.01
 
-        self.gamma = 0.99
+
+        self.gamma = 0.75
         if self.sample_mode == 'e_greedy':
-            self.epsilon = 0.99
+            self.epsilon = 0.9
         elif self.sample_mode == 'bayes':
-            self.epsilon = 0.1
+            self.epsilon = 0.15
 
         print 'Setting up Tensorflow'
         self.targetQ = models.DuelingQ(self.board, self.n_actions, self.learning_rate)
@@ -274,10 +291,6 @@ class DoubleQAgent(BaseAgent):
     """ Action from onlineQ """
     def _sample_action(self, s_t, verbose=False):
         if self.sample_mode == 'e_greedy':
-            feed_dict = {self.onlineQ.state: s_t, self.onlineQ.keep_prob: 1.0}
-            a_t, Qpred = self.sess.run([self.onlineQ.action_op, self.onlineQ.Qpred],
-                feed_dict=feed_dict)
-
             if np.random.rand(1)[0] < self.epsilon:
                 # a_t = np.random.choice(range(self.n_actions))
 
@@ -288,15 +301,22 @@ class DoubleQAgent(BaseAgent):
 
                 # a_t = np.random.choice([a_t, a_t_legal])
             else:
+                feed_dict = {self.onlineQ.state: s_t, self.onlineQ.keep_prob: 1.0}
+                a_t, Qpred = self.sess.run([self.onlineQ.action_op, self.onlineQ.Qpred],
+                    feed_dict=feed_dict)
                 a_t = a_t[0]
 
         elif self.sample_mode == 'bayes':
+            Qpred_bootstrap = []
             feed_dict = {self.onlineQ.state: s_t, self.onlineQ.keep_prob: self.epsilon}
-            a_t, Qpred = self.sess.run([self.onlineQ.action_op, self.onlineQ.Qpred],
-                feed_dict=feed_dict)
-            a_t = a_t[0]
-            # if verbose:
-            #     print 'MOVE {} (bayes) Qt a_t: {}'.format(self.board.move_count, a_t),
+            for _ in range(self.n_bootstrap):
+                a_t, Qpred = self.sess.run([self.onlineQ.action_op, self.onlineQ.Qpred],
+                    feed_dict=feed_dict)
+                Qpred_bootstrap.append(Qpred)
+
+            Qpred_mean = np.mean(np.vstack(Qpred), 0)
+            a_t = np.argmax(Qpred_mean)
+            # a_t = a_t[0]
         else:
             print '{} not recognized'.format(self.sample_mode)
             a_t = None
@@ -320,7 +340,8 @@ class DoubleQAgent(BaseAgent):
         while self.history.n < self.history.capacity:
             ## Iterate games
             self.board.refresh_orbs()
-            self.board._select_random()
+            # self.board._select_random()
+            self.board.select_orb([0,0])
             move = 0
             total_reward = 0
             previous_combo = 0
@@ -333,11 +354,11 @@ class DoubleQAgent(BaseAgent):
                 a_t = self._sample_action(s_t)
 
                 ## Observe altered state(t+1)
-                terminal_move = self.board.move_orb(a_t)
+                terminal_move, selected_pos = self.board.move_orb(a_t)
                 s_t1 = self.board.board_2_state()
 
-                r_t, previous_combo = self._eval_reward(
-                    move, terminal_move, previous_combo)
+                # r_t = self._eval_distance_reward(selected_pos, terminal_move)
+                r_t = self._eval_reward(terminal_move, selected_pos)
 
                 self.history.store_state(s_t, a_t, r_t, s_t1, terminal_move)
 
@@ -355,8 +376,8 @@ class DoubleQAgent(BaseAgent):
         n_moves = self.n_moves
 
         self.board.refresh_orbs()
-        # self.board.select_orb([3,4]) ## Somewhere in the middle
-        self.board._select_random()
+        # self.board._select_random()
+        self.board.select_orb([0,0]) ## Somewhere in the middle
 
         move = 0
         total_reward = 0
@@ -372,9 +393,10 @@ class DoubleQAgent(BaseAgent):
             a_t = self._sample_action(s_t, verbose=verbose)
 
             ## Evaluate reward and next state
-            terminal_move = self.board.move_orb(a_t)
+            terminal_move, selected_pos= self.board.move_orb(a_t)
             s_t1 = self.board.board_2_state()
-            r_t, previous_combo = self._eval_reward(move, terminal_move, previous_combo)
+            r_t = self._eval_reward(terminal_move, selected_pos)
+            # r_t = self._eval_distance_reward(selected_pos, terminal_move)
             self.history.store_state(s_t, a_t, r_t, s_t1, terminal_move)
 
             ## Minibatch update:
@@ -422,8 +444,8 @@ class DoubleQAgent(BaseAgent):
 
             if terminal_move:
                 if verbose:
-                    print 'moves: {} r_t = {} (mode: {}) (end-turn {})'.format(
-                        move, r_t, self.sample_mode, terminal_move)
+                    print 'moves: {} r_t = {} (lr: {}) (mode: {}) (end-turn {})'.format(
+                        move, r_t, self.learning_rate, self.sample_mode, terminal_move)
 
                 break
 
@@ -434,8 +456,8 @@ class DoubleQAgent(BaseAgent):
         moves = 0
         self.board.refresh_orbs()
         self.board._select_random()
-        while self.board.selected is not None and moves<=self.n_moves:
-            time.sleep(0.25)
+        while self.board.selected is not None:
+            time.sleep(0.15)
             moves += 1
             s_t = self.board.board_2_state()
             feed_dict = {self.onlineQ.state: s_t, self.onlineQ.keep_prob: 1.0}

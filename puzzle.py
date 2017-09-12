@@ -277,14 +277,14 @@ class Board(object):
             if action==4 or self.move_count<=0:
                 ## Deselect orb; Effectively ending the turn
                 self.selected = None
-                return True
+                return True, position
             else:
                 ## Set illegal move to noop
                 ## noop is implicit - we want it to be contextual
                 if self.move_count <= 0:
-                    return True
+                    return True, position
                 else:
-                    return False
+                    return False, position
 
         if action==0: # left
             newpos = [sr, sc-1]
@@ -311,9 +311,9 @@ class Board(object):
             self.draw_board(show_selected=show_selected)
 
         if self.move_count <= 0:
-            return True
+            return True, newpos
         else:
-            return False
+            return False, newpos
 
 
     def draw_board(self, show_selected=True):
