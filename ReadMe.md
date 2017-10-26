@@ -13,6 +13,7 @@ The environment supports the following:
 * Baseline random agent
 * Dueling Deep Q-Network agent
 * Soon: baseline performance with D-DQN
+* Idea: exclude illegal moves by setting illegal move logits to -inf
 
 
 ### Project Milestones & Plans
