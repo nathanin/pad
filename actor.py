@@ -59,7 +59,7 @@ def train_loop(agent, n_steps=10000):
     reward = [0]
     moves = [0]
     print_iter = history_iter = 250
-    anneal_iter = 500
+    anneal_iter = 5000
     memory_iter = 10000
     loop_time = time.time()
     for step in range(n_steps):
@@ -92,7 +92,7 @@ def train_loop(agent, n_steps=10000):
             print 'step: {} annealing epsilon..'.format(step),
             if agent.sample_mode == 'e_greedy':
                 ## E-greedy exploration
-                agent.epsilon *= 0.7
+                agent.epsilon *= 0.9
                 agent.epsilon = max(0.1, agent.epsilon)
             elif agent.sample_mode == 'bayes':
                 ## Bayesian exploration
@@ -110,17 +110,17 @@ def train_loop(agent, n_steps=10000):
 
 if __name__ == '__main__':
     shape = [5,6]
-    moves = 35
+    moves = 100
     board = puzzle.Board(shape=shape, max_moves=moves, show=False)
     # agent = agents.RandomAgent(board, n_moves=10)
 
     # agent = agents.DeepQAgent(board, n_moves=20, batch_size=16, memory=5400)
     agent = agents.DoubleQAgent(board,
         n_moves=moves,
-        batch_size=24,
+        batch_size=512,
         memory=10000,
-        sample_mode='bayes',
-        reward_type='distance')
+        sample_mode='e_greedy',
+        reward_type='combo')
 
     print 'Max moves: ', agent.n_moves
     agent.observe()

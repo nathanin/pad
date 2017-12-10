@@ -37,18 +37,18 @@ class DuelingQ(object):
     def __init__(self, board, action_dim, learning_rate):
         board_row, board_col = board.shape
 
-        self.weights = {'input': weight_variable([3, 3, 2, 32]),
-                   'hidden1': weight_variable([1, 1, 32, 32]),
-                   'hidden2': weight_variable([2, 2, 32, 32]),
-                   'advantage': weight_variable([32, action_dim]),
+        self.weights = {'input': weight_variable([3, 3, 2, 64]),
+                   'hidden1': weight_variable([1, 1, 64, 64]),
+                   'hidden2': weight_variable([2, 2, 64, 64]),
+                   'advantage': weight_variable([64, action_dim]),
                 #    'advantage2': weight_variable([128, action_dim]),
-                   'value': weight_variable([32, 1]),}
+                   'value': weight_variable([64, 1]),}
                 #    'value2': weight_variable([128, 1]),}
                 #    'output': weight_variable([512, action_dim])}
 
-        self.biases = {'input': bias_variable([32]),
-                       'hidden1': bias_variable([32]),
-                       'hidden2': bias_variable([32]),
+        self.biases = {'input': bias_variable([64]),
+                       'hidden1': bias_variable([64]),
+                       'hidden2': bias_variable([64]),
                        'advantage': bias_variable([action_dim]),
                        'value': bias_variable([1]), }
 

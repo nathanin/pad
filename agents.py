@@ -98,7 +98,7 @@ class History(object):
 
         print '--------- Experience Summary ----------'
         print 'Experience history with {} entries'.format(self.n)
-        print 'Actions distribution:\n\t0:{:2.3f}\n\t1:{:2.3f}\n\t2:{:2.3f}\n\t3:{:2.3f}\n\t4:{:2.3f}'.format(
+        print 'Actions distribution:\n\tLeft: {:2.3f}\n\tUp: {:2.3f}\n\tRight: {:2.3f}\n\tDown: {:2.3f}\n\tEnd: {:2.3f}'.format(
             actions[0],
             actions[1],
             actions[2],

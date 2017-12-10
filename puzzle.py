@@ -280,7 +280,6 @@ class Board(object):
                 return True, position
             else:
                 ## Set illegal move to noop
-                ## noop is implicit - we want it to be contextual
                 if self.move_count <= 0:
                     return True, position
                 else:
