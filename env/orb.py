@@ -39,7 +39,7 @@ typedict = {
     'jammer': 8.
 }
 
-typedict = {k: idx/len(orbtypes) for idx, k in enumerate(typedict.iterkeys())}
+typedict = {k: idx/len(orbtypes) for idx, k in enumerate(typedict.keys())}
 
 class Orb(object):
 

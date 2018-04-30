@@ -4,14 +4,15 @@ Game board script
 import sys, pygame, time
 import numpy as np
 
-from orb import Orb
+from .orb import Orb
 
 """
 
 move_count -- start at 1 and anneal towards 0 with more moves -- simulate time
 
 """
-class Board(object):
+
+class PAD(object):
     def __init__(self, shape=[5,6], show=True, max_moves=50, sleep_time=0.25):
         self.orb_size = 45
         self.selected_dot = 15
@@ -50,7 +51,7 @@ class Board(object):
     '''
     def _init_orbs(self):
         n = np.prod(self.shape)
-        print 'generating {} orbs'.format(n)
+        print('generating {} orbs'.format(n))
         orbs = np.array(
             [Orb(board_shape=self.shape, radius=self.orb_size) for _ in range(n)])
         orbs = orbs.reshape(self.shape)
@@ -74,8 +75,6 @@ class Board(object):
         if self.show:
             self._highlight_selected()
             time.sleep(2)
-        # self.selected = self.orbs[0,0]
-        # print self.selected, self.selected.type, self.selected.position
 
 
     def _aggregate_combos(self):
@@ -294,7 +293,7 @@ class Board(object):
         elif action==3: # down
             newpos = [sr+1, sc]
         else:
-            print 'wtf'
+            print('wtf')
 
         ## Do the swap
         hold = self.orbs[newpos[0], newpos[1]]
@@ -379,7 +378,6 @@ class Board(object):
             time.sleep(self.sleep_time)
 
 
-
     def refresh_orbs(self):
         self.move_count = 1.0
         show_hold = self.show
@@ -400,6 +398,12 @@ class Board(object):
 
         # print 'refresh_orbs: {}'.format(time.time() - tstart)
 
+    ## N-colors
+    def as_onehot(self, state):
+        onehot = np.eye(6)[state]
+        onehot = onehot.reshape(self.shape[0], self.shape[1], 6)
+        return onehot
+
     ''' Not sure if needed; pulls orb config '''
     def board_2_state(self, flat=False):
         state = [orb.type_code for orb in self.orbs.flatten()]
@@ -414,77 +418,68 @@ class Board(object):
             selected[sr,sc] = self.move_count ## 2 instead of 1
             # selected[sr, sc] = 2.0
 
-
         if flat:
             state = state.reshape(1,np.prod(self.shape))
             selected = selected.flatten().reshape(1,np.prod(self.shape))
             state = np.hstack([state, selected])
         else:
-            state = state.reshape(self.shape[0], self.shape[1])
+            # state = state.reshape(self.shape[0], self.shape[1])
+            state = self.as_onehot(state)
             # selected = selected.flatten().reshape(self.shape[0], self.shape[1])
             state = np.expand_dims(np.dstack([state, selected]), 0)
 
         return state
 
 
-
-    """
-
-    Example run loop
-
-    I've re-implemented this loop in `actor.py`
-
-    """
-    def run(self):
-        self.screen = pygame.display.set_mode(self.size)
-        self.draw_board()
-        pygame.display.flip()
-        n_moves = 20
-        play = True
-
-        while 1:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    sys.exit()
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
-                    print 'Resuming'
-                    play = True
-
-            while play:
-                self._select_random()
-                for _ in range(n_moves):
-                    # Sample from legal moves
-                    moves = self.selected.get_possible_moves(self)
-                    self.move_orb(direction=np.random.choice(moves))
-                    # self.draw_board()
-                    # time.sleep(0.25)
-
-                time.sleep(1)
-                self.selected = None
-                self.draw_board()
-                n_matches = self.eval_matches()
-                while n_matches > 0:
-                    self.display_matches()
-                    # time.sleep(0.5)
-                    self.clear_matches()
-                    # time.sleep(0.5)
-                    self.skyfall()
-                    # time.sleep(0.5)
-                    n_matches = self.eval_matches()
-
-                for event in pygame.event.get():
-                    print event
-                    if event.type == pygame.QUIT:
-                        sys.exit()
-                    elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
-                        ## TODO add keypress screen PAUSE
-                        print 'Pausing'
-                        play = False
-
+    # def run(self):
+    #     self.screen = pygame.display.set_mode(self.size)
+    #     self.draw_board()
+    #     pygame.display.flip()
+    #     n_moves = 20
+    #     play = True
+    #
+    #     while 1:
+    #         for event in pygame.event.get():
+    #             if event.type == pygame.QUIT:
+    #                 sys.exit()
+    #             elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+    #                 print('Resuming')
+    #                 play = True
+    #
+    #         while play:
+    #             self._select_random()
+    #             for _ in range(n_moves):
+    #                 # Sample from legal moves
+    #                 moves = self.selected.get_possible_moves(self)
+    #                 self.move_orb(direction=np.random.choice(moves))
+    #                 # self.draw_board()
+    #                 # time.sleep(0.25)
+    #
+    #             time.sleep(1)
+    #             self.selected = None
+    #             self.draw_board()
+    #             n_matches = self.eval_matches()
+    #             while n_matches > 0:
+    #                 self.display_matches()
+    #                 # time.sleep(0.5)
+    #                 self.clear_matches()
+    #                 # time.sleep(0.5)
+    #                 self.skyfall()
+    #                 # time.sleep(0.5)
+    #                 n_matches = self.eval_matches()
+    #
+    #             for event in pygame.event.get():
+    #                 print(event)
+    #                 if event.type == pygame.QUIT:
+    #                     sys.exit()
+    #                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+    #                     ## TODO add keypress screen PAUSE
+    #                     print('Pausing')
+    #                     play = False
 
 
 # import board; x=board.Board(); x.run()
 
-if __name__ == '__main__':
-    x = Board()
-    x.run()
+# if __name__ == '__main__':
+#     x = Board()
+#     x.run()

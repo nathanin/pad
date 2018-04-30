@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import time
-import models
+from .models import DuelingQ
 
 '''
 
@@ -9,7 +9,6 @@ With heavy reference to
 https://github.com/asrivat1/DeepLearningVideoGames
 
 '''
-
 
 class History(object):
     def __init__(self, capacity=1024):
@@ -26,7 +25,7 @@ class History(object):
 
 
     def flush_history(self):
-        print 'Dumping memory'
+        print('Dumping memory')
         self.n = 0
         self.memory = {
             'state': [],
@@ -52,7 +51,7 @@ class History(object):
         self.update_cycle -= 1
 
         if self.update_cycle == 0:
-            print 'History refreshed'
+            print('History refreshed')
             self.update_cycle = self.capacity
 
 
@@ -96,30 +95,28 @@ class History(object):
         rewards = np.asarray(self.memory['reward'])
         is_ends = np.asarray(self.memory['is_end'])
 
-        print '--------- Experience Summary ----------'
-        print 'Experience history with {} entries'.format(self.n)
-        print 'Actions distribution:\n\tLeft: {:2.3f}\n\tUp: {:2.3f}\n\tRight: {:2.3f}\n\tDown: {:2.3f}\n\tEnd: {:2.3f}'.format(
+        print('--------- Experience Summary ----------')
+        print('Experience history with {} entries'.format(self.n))
+        print('Actions distribution:\n\tLeft: {:2.3f}\n\tUp: {:2.3f}\n\tRight: {:2.3f}\n\tDown: {:2.3f}\n\tEnd: {:2.3f}'.format(
             actions[0],
             actions[1],
             actions[2],
             actions[3],
-            actions[4], )
-        print 'Rewards: mean: {} min: {} max: {}'.format(
-            np.mean(rewards), rewards.min(), rewards.max() )
-        print 'Rewards non-0: {} mean: {} min: {} max: {}'.format(
+            actions[4], ))
+        print('Rewards: mean: {} min: {} max: {}'.format(
+            np.mean(rewards), rewards.min(), rewards.max() ))
+        print('Rewards non-0: {} mean: {} min: {} max: {}'.format(
             (rewards!=0).sum(),
             np.mean(rewards[rewards!=0]),
             rewards[rewards!=0].min(),
-            rewards[rewards!=0].max() )
+            rewards[rewards!=0].max() ))
         try:
-            print 'Terminal actions: {}'.format((is_ends == True).sum())
+            print('Terminal actions: {}'.format((is_ends == True).sum()))
         except:
-            print 'Teminal actions: None??'
+            print('Teminal actions: None??')
 
 
-"""
-Attempt at OOP
-"""
+
 class BaseAgent(object):
     def __init__(self, board, n_moves=10, reward_type='combo'):
         self.board = board
@@ -149,6 +146,52 @@ class BaseAgent(object):
 
     def swap_board(self, newboard):
         self.board = newboard
+
+    """ Utility procedure to fill up memory """
+    def observe(self, pause_time=0, verbose=False):
+        print('Observing {} sampling mode'.format(self.sample_mode))
+        n_moves = self.n_moves
+
+        ## Set epsilon-greedy pretraining condition
+        ## Bayesian preconditioning seems to give unbalanced initialization
+        store_mode = self.sample_mode
+        store_epsilon = self.epsilon
+        self.sample_mode = 'e_greedy'
+        self.epsilon = 0.75
+
+        ## Do many runs to fill the memory
+        while self.history.n < self.history.capacity:
+            ## Iterate games
+            self.board.refresh_orbs()
+            # self.board._select_random()
+            self.board.select_orb([0,0])
+            move = 0
+            total_reward = 0
+            previous_combo = 0
+            while self.board.selected is not None:
+                ## Feed history
+                move += 1
+                s_t = self.board.board_2_state()
+
+                ## Get an action from target net
+                a_t = self._sample_action(s_t)
+
+                ## Observe altered state(t+1)
+                terminal_move, selected_pos = self.board.move_orb(a_t)
+                s_t1 = self.board.board_2_state()
+
+                # r_t = self._eval_distance_reward(selected_pos, terminal_move)
+                r_t = self._eval_reward(terminal_move, selected_pos)
+
+                self.history.store_state(s_t, a_t, r_t, s_t1, terminal_move)
+
+                if terminal_move:
+                    break
+        ## Restore settings
+        self.sample_mode = store_mode
+        self.epsilon = store_epsilon
+        print('Done observing; Agent memory full')
+
 
 
     def _distance_reward(self, position, terminal_move):
@@ -219,7 +262,11 @@ https://github.com/awjuliani/DeepRL-Agents
 
 I think the first idea to implement is take in a state and return
 some action that ought to maximize reward
-In such case what is the optimization?
+
+This is the one with an 'online' and 'offline' copy.
+The model is sampled from the online copy, and updates are made, but only
+some of the updates are transferred to the offline copy.
+This is supposed to help stability
 
     Deep Q Pseudo Code [Mnih et al, 2015]:
 
@@ -270,9 +317,11 @@ class DoubleQAgent(BaseAgent):
         elif self.sample_mode == 'bayes':
             self.epsilon = 0.15
 
-        print 'Setting up Tensorflow'
-        self.targetQ = models.DuelingQ(self.board, self.n_actions, self.learning_rate)
-        self.onlineQ = models.DuelingQ(self.board, self.n_actions, self.learning_rate)
+        print('Setting up Tensorflow')
+        self.targetQ = models.DuelingQ(self.board, self.n_actions,
+            self.learning_rate, name='target')
+        self.onlineQ = models.DuelingQ(self.board, self.n_actions,
+            self.learning_rate, name='online')
         self.config = tf.ConfigProto()
         self.config.gpu_options.allow_growth = True
 
@@ -283,9 +332,9 @@ class DoubleQAgent(BaseAgent):
 
         trainables = tf.trainable_variables()
         self.targetOps = models.updateTargetGraph(trainables, self.tau)
-        print self.targetOps
+        print(self.targetOps)
 
-        print 'Agent ready'
+        print('Agent ready')
 
 
     """ Action from onlineQ """
@@ -318,56 +367,10 @@ class DoubleQAgent(BaseAgent):
             a_t = np.argmax(Qpred_mean)
             # a_t = a_t[0]
         else:
-            print '{} not recognized'.format(self.sample_mode)
+            print('{} not recognized'.format(self.sample_mode))
             a_t = None
         #/end if
         return a_t
-
-
-    """ Utility procedure to fill up memory """
-    def observe(self, pause_time=0, verbose=False):
-        print 'Observing {} sampling mode'.format(self.sample_mode)
-        n_moves = self.n_moves
-
-        ## Set epsilon-greedy pretraining condition
-        ## Bayesian preconditioning seems to give unbalanced initialization
-        store_mode = self.sample_mode
-        store_epsilon = self.epsilon
-        self.sample_mode = 'e_greedy'
-        self.epsilon = 0.75
-
-        ## Do many runs to fill the memory
-        while self.history.n < self.history.capacity:
-            ## Iterate games
-            self.board.refresh_orbs()
-            # self.board._select_random()
-            self.board.select_orb([0,0])
-            move = 0
-            total_reward = 0
-            previous_combo = 0
-            while self.board.selected is not None:
-                ## Feed history
-                move += 1
-                s_t = self.board.board_2_state()
-
-                ## Get an action from target net
-                a_t = self._sample_action(s_t)
-
-                ## Observe altered state(t+1)
-                terminal_move, selected_pos = self.board.move_orb(a_t)
-                s_t1 = self.board.board_2_state()
-
-                # r_t = self._eval_distance_reward(selected_pos, terminal_move)
-                r_t = self._eval_reward(terminal_move, selected_pos)
-
-                self.history.store_state(s_t, a_t, r_t, s_t1, terminal_move)
-
-                if terminal_move:
-                    break
-        ## Restore settings
-        self.sample_mode = store_mode
-        self.epsilon = store_epsilon
-        print 'Done observing; Agent memory full'
 
 
 
@@ -401,10 +404,6 @@ class DoubleQAgent(BaseAgent):
 
             ## Minibatch update:
             s_j, a_j, r_j, s_j1, is_end = self.history.minibatch(self.batch_size)
-            # if self.sample_mode == 'bayes':
-            #     keep_prob = self.epsilon
-            # else:
-            #     keep_prob = 1.0
 
             ## Sample from the full model for updating -- this is like test time
             ## Maybe
@@ -438,14 +437,14 @@ class DoubleQAgent(BaseAgent):
             ## Update targetQ
             if self.global_step % self.update_iter == 0:
                 if verbose:
-                    print '(updating)',
-                models.updateTarget(self.targetOps, self.sess)
+                    print('(updating)',
+                models.updateTarget(self.targetOps, self.sess))
 
 
             if terminal_move:
                 if verbose:
-                    print 'moves: {} r_t = {} (lr: {}) (mode: {}) (end-turn {})'.format(
-                        move, r_t, self.learning_rate, self.sample_mode, terminal_move)
+                    print('moves: {} r_t = {} (lr: {}) (mode: {}) (end-turn {})'.format(
+                        move, r_t, self.learning_rate, self.sample_mode, terminal_move))
 
                 break
 
@@ -471,18 +470,17 @@ class DoubleQAgent(BaseAgent):
 
 
 """
-
 Single Q Network learner Single Q Network learner
 Single Q Network learner Single Q Network learner
 Single Q Network learner Single Q Network learner
-
 """
 
 class DeepQAgent(BaseAgent):
-    def __init__(self, board, n_moves=10, batch_size=16, memory=1024):
-        super(DeepQAgent, self).__init__(board, n_moves)
+    def __init__(self, board, n_moves=100, batch_size=32, memory=1024, sample_mode='e_greedy', reward_type='combo'):
+        super(DeepQAgent, self).__init__(board, n_moves, reward_type)
         ## Some hyper params
         self.name = 'DeepQAgent'
+        self.sample_mode = sample_mode
         self.learning_rate = 0.00001
         self.epsilon = 0.9
         self.gamma = 0.8
@@ -490,19 +488,16 @@ class DeepQAgent(BaseAgent):
         self.batch_size = batch_size
         self.global_step = 0
 
-        print 'Setting up Tensorflow'
+        print('Setting up Tensorflow')
         # self.targetQ = models.DuelingQ(self.board, self.n_actions)
-        self.onlineQ = models.DuelingQ(self.board, self.n_actions, self.learning_rate)
+        self.onlineQ = DuelingQ(self.board, self.n_actions, self.learning_rate)
         self.config = tf.ConfigProto()
         self.config.gpu_options.allow_growth = True
 
         # self._setup_network_v1()
         self.sess = tf.Session(config=self.config)
         self.sess.run(self.onlineQ.init_op)
-        print 'Agent ready'
-
-
-
+        print('Agent ready')
 
     '''
     Populate a replay history by playing games and storing moves
@@ -551,7 +546,7 @@ class DeepQAgent(BaseAgent):
                 if do_break:
                     break
 
-        print 'Done observing; Agent memory full'
+        print('Done observing; Agent memory full')
 
 
 
@@ -615,13 +610,11 @@ class DeepQAgent(BaseAgent):
                                           self.onlineQ.loss_op,
                                           self.onlineQ.delta],
                                           feed_dict=feed_dict)
-            # if verbose:
-            #     print 'delta: {}, loss: {}'.format(delta, loss)
 
             if verbose:
-                print 'move {} ep a_t: {} (mode {})'.format(
-                    move, a_t, self.sample_mode),
-                print 'loss= {}, r_t = {}'.format(loss, r_t)
+                print('move {} ep a_t: {} (mode {})'.format(
+                    move, a_t, self.sample_mode), end='')
+                print('loss= {}, r_t = {}'.format(loss, r_t))
 
             if do_break:
                 break

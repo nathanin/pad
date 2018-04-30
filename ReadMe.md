@@ -4,17 +4,10 @@ Puzzle RLE (Reinforcement Learning Environment) is an environment for learning t
 The environment is a re-implemntation based on orb-matching and clearing mechanics observed during normal gameplay.
 
 The environment supports the following:
-* Arbitrary board size and orb types
 * pygame environment visualization engine
-* 5 Actions: move left, up, right, down, stop-turn
-* Optional legal moves
-* Combo finding, counting, and clearing with/without skyfall
-* Modular reward function design
+* 5 Actions: select-orb, move left, up, right, down, stop-turn
 * Baseline random agent
 * Dueling Deep Q-Network agent
-* Soon: baseline performance with D-DQN
-* Idea: exclude illegal moves by setting illegal move logits to -inf
-
 
 ### Project Milestones & Plans
 - Implement basic movement, clearing, skyfall and cascade mechanics ( :heavy_check_mark: Sep 2, '17)
@@ -26,12 +19,10 @@ The environment supports the following:
 - Implement dungeon floor progression with attacking and enemies ( :x: target: Oct '17 )
 - Integration with `gym` API/design ( :x: target: Dec '17 )
 
-
 #### Depends
 * numpy
 * tensorflow
 * pygame (visualization only)
-
 
 ## References
 Implementation of DQN algorithms were with reference to the original papers:
