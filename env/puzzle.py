@@ -407,7 +407,7 @@ class PAD(object):
     ''' Not sure if needed; pulls orb config '''
     def board_2_state(self, flat=False):
         state = [orb.type_code for orb in self.orbs.flatten()]
-        state = np.array(state)
+        state = np.array(state, dtype=np.uint8)
 
         ## Selected represents the selected orb and the internal clock
         ## the clock 'ticks' down linearly towards 0, when the turn is ended

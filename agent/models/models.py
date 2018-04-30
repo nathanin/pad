@@ -12,7 +12,7 @@ class DuelingQ(object):
     def __init__(self, board, action_dim, learning_rate, name='DuelingQ'):
         board_row, board_col = board.shape
         nonlin = tf.nn.relu
-        kernels = [64, 128, 256, 512]
+        kernels = [64, 64, 64, 64]
 
         with tf.variable_scope(name) as scope:
             ## input is number of orb types + 1 for selected
@@ -32,7 +32,7 @@ class DuelingQ(object):
             print('h4: ', net.get_shape())
 
             net = tf.layers.flatten(net, name='flatten')
-            print('flatten: ', h4.get_shape())
+            print('flatten: ', net.get_shape())
             # net = tf.nn.dropout(net, self.keep_prob)
 
             ## Split advantage and value functions:
@@ -49,7 +49,7 @@ class DuelingQ(object):
             print('adv: ', adv_split.get_shape())
 
             val_split = nonlin(linear(val_split, 512, var_scope='val'))
-            val_split = nonlin(linear(val_split, action_dim, var_scope='val'))
+            val_split = nonlin(linear(val_split, action_dim, var_scope='val_action'))
             print('value: ', val_split.get_shape())
 
             adv_mean = tf.reduce_mean(adv_split, 1, keep_dims=True)

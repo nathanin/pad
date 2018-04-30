@@ -1,1 +1,1 @@
-from actor import *
+from .actor import *

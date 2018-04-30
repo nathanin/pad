@@ -2,3 +2,5 @@ latex/
 *.pyc
 experiments/
 runs/
+openai-baselines/
+

@@ -8,8 +8,6 @@ import numpy as np
 import sys
 import time
 
-from ..agent import DeepQAgent, DoubleQAgent
-# from ..env import puzzle
 
 def control_loop(events):
     for event in events:
@@ -89,7 +87,7 @@ def train_loop(agent, n_steps=10000):
             r_step, moves_step = agent.train()
 
         if step % anneal_iter == 0:
-            print('step: {} annealing epsilon..'.format(step),end='')
+            print('step: {} annealing epsilon'.format(step))
             if agent.sample_mode == 'e_greedy':
                 ## E-greedy exploration
                 agent.epsilon *= 0.9
@@ -98,7 +96,7 @@ def train_loop(agent, n_steps=10000):
                 ## Bayesian exploration
                 agent.epsilon *= 1.15
                 agent.epsilon = min(0.8, agent.epsilon)
-            print('eps = {}'.format(agent.epsilon),end='')
+            print('eps = {}'.format(agent.epsilon))
 
 
         reward.append(r_step)
