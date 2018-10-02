@@ -1,12 +1,13 @@
 import numpy as np
 import tensorflow as tf
+import time
 from .models import DuelingQ
 from .base import BaseAgent
 from .history import History
 
 class DeepQAgent(BaseAgent):
     def __init__(self, board, n_moves=100, batch_size=32, memory=1024,
-        sample_mode='e_greedy', reward_type='combo'):
+        target=4, sample_mode='e_greedy', reward_type='combo'):
 
         super(DeepQAgent, self).__init__(board, n_moves, reward_type)
         ## Some hyper params
@@ -19,89 +20,55 @@ class DeepQAgent(BaseAgent):
         self.batch_size = batch_size
         self.global_step = 0
 
-        print('Setting up Tensorflow')
-        # self.targetQ = models.DuelingQ(self.board, self.n_actions)
-        self.onlineQ = DuelingQ(self.board, self.n_actions, self.learning_rate)
-        self.config = tf.ConfigProto()
-        self.config.gpu_options.allow_growth = True
+        # Number of combos to accomplish 
+        self.target = target
 
-        # self._setup_network_v1()
-        self.sess = tf.Session(config=self.config)
-        self.sess.run(self.onlineQ.init_op)
+        print('Setting up Tensorflow')
+        self.onlineQ = DuelingQ(self.n_actions)
+        # self.config = tf.ConfigProto()
+        # self.config.gpu_options.allow_growth = True
+
+        # # self._setup_network_v1()
+        # self.sess = tf.Session(config=self.config)
+        # self.sess.run(self.onlineQ.init_op)
+        print('Observing behavior')
+        self.observe()
+
         print('Agent ready')
 
-    # '''
-    # Populate a replay history by playing games and storing moves
-    # '''
-    # def observe(self, pause_time=0, verbose=False):
-    #     n_moves = self.n_moves
-    #
-    #     ## Do many runs to fill the memory
-    #     while self.history.n < self.history.capacity:
-    #
-    #         ## Iterate games
-    #         self.board.refresh_orbs()
-    #         self.board._select_random()
-    #         move = 0
-    #         total_reward = 0
-    #         previous_combo = 0
-    #         while self.board.selected is not None and move<=n_moves:
-    #             ## Feed history
-    #             move += 1
-    #             s_t = self.board.board_2_state()
-    #             feed_dict = {self.onlineQ.state: s_t}
-    #             a_t, Qpred = self.sess.run([self.onlineQ.action_op, self.onlineQ.Qpred],
-    #                 feed_dict=feed_dict)
-    #
-    #             ## Exploration -- in the beginning it will be very high
-    #             if np.random.rand(1)[0] < self.epsilon:
-    #                 a_t = np.random.choice(range(self.n_actions))
-    #                 ## Restrict to legal actions
-    #                 action_space = self.board.selected.get_possible_moves(self.board)
-    #                 a_t_legal = np.random.choice(action_space)
-    #
-    #                 # 1/2 chance to be selected from legal actions only
-    #                 a_t = np.random.choice([a_t, a_t_legal])
-    #             else:
-    #                 a_t = a_t[0]
-    #
-    #             ## Observe altered state(t+1)
-    #             illegal_move = self.board.move_orb(a_t)
-    #             s_t1 = self.board.board_2_state()
-    #
-    #             r_t, previous_combo, do_break = self._eval_reward(
-    #                 move, illegal_move, previous_combo)
-    #
-    #             self.history.store_state(s_t, a_t, r_t, s_t1, do_break)
-    #
-    #             if do_break:
-    #                 break
-    #
-    #     print('Done observing; Agent memory full')
-
-
+    # ! blow this up
+    # def train(self, update_iter=5, verbose=False):
+    #     pass
 
     def train(self, update_iter=5, verbose=False):
         n_moves = self.n_moves
 
-        self.board.refresh_orbs()
+        self.board.refresh_orbs(seed=None)
         # self.board.select_orb([3,4]) ## Somewhere in the middle
-        self.board._select_random()
+        self.board._select_random(seed=None)
 
         move = 0
         total_reward = 0
-        previous_combo = 0
-        loss = None
+
+        # Reset previous number of matches register.
+        self.prev_matches = 0
         while self.board.selected is not None and move <= n_moves:
             ## Feed history new observations
             move += 1
             self.global_step += 1
 
+            # s_t = self.board.board_2_state()
+            # feed_dict = {self.onlineQ.state: s_t}
+            # a_t, Qpred = self.sess.run([self.onlineQ.action_op, 
+            #     self.onlineQ.Qpred],
+            #     feed_dict=feed_dict)
+            
+            ## Observe the models' behavior
+            ## Get action and predicted q value from state
             s_t = self.board.board_2_state()
-            feed_dict = {self.onlineQ.state: s_t}
-            a_t, Qpred = self.sess.run([self.onlineQ.action_op, self.onlineQ.Qpred],
-                feed_dict=feed_dict)
+            a_t, predQ = self.onlineQ(s_t)
 
+            ## Do the predicted action, or a random action
             if np.random.rand(1)[0] < self.epsilon:
                 a_t = np.random.choice(range(self.n_actions))
                 ## Restrict to legal actions
@@ -111,60 +78,66 @@ class DeepQAgent(BaseAgent):
             else:
                 a_t = a_t[0]
 
-            illegal_move = self.board.move_orb(a_t)
+            terminal_move, selected_position = self.board.move_orb(a_t)
             s_t1 = self.board.board_2_state()
-            r_t, previous_combo, do_break = self._eval_reward(
-                move, illegal_move, previous_combo)
+            r_t = self._eval_reward(terminal_move, selected_position)
 
-            self.history.store_state(s_t, a_t, r_t, s_t1, do_break)
+            ## Add the new (state, action, reward, new-state) tuple to history
+            self.history.store_state(s_t, a_t, r_t, s_t1, terminal_move)
 
             ## Minibatch update:
-            # if self.global_step % update_iter == 0:
-                # if verbose:
-                #     print 'Updating online network'
-            s_j, a_j, r_j, s_j1, is_end = self.history.minibatch(self.batch_size)
-            feed_dict = {self.onlineQ.state: s_j}
-            q_j = self.sess.run(self.onlineQ.Qpred, feed_dict=feed_dict)
-            feed_dict = {self.onlineQ.state: s_j1}
-            q_prime = self.sess.run(self.onlineQ.Qpred, feed_dict=feed_dict)
+            ## Pull a (state, action, reward, ...) from history
+            s_j, a_j, r_j, s_j1, is_end = self.history.minibatch(
+                self.batch_size)
+            loss = self.onlineQ.q_train(s_j, a_j, r_j, s_j1, is_end)
 
-            nextQ = q_j
-            for idx, (a_jx, r_jx, is_end_j) in enumerate(zip(a_j, r_j, is_end)):
-                if is_end_j:
-                    nextQ[idx, a_jx] = r_jx
-                else:
-                    nextQ[idx, a_jx] = r_jx + self.gamma * np.max(q_prime[idx,:])
+            # feed_dict = {self.onlineQ.state: s_j}
+            # q_j = self.sess.run(self.onlineQ.Qpred, feed_dict=feed_dict)
+            # q_j = self.onlineQ.predictQ(s_j)
+            # feed_dict = {self.onlineQ.state: s_j1}
+            # q_prime = self.sess.run(self.onlineQ.Qpred, 
+            #     feed_dict=feed_dict)
+            # q_prime = self.onlineQ.predictQ(s_j1)
+
+            # nextQ = q_j
+            # for idx, (a_jx, r_jx, is_end_j) in enumerate(zip(a_j, r_j, is_end)):
+            #     if is_end_j:
+            #         nextQ[idx, a_jx] = r_jx
+            #     else:
+            #         nextQ[idx, a_jx] = r_jx + self.gamma * np.max(q_prime[idx,:])
 
             ## Update
-            feed_dict = {self.onlineQ.nextQ: nextQ, self.onlineQ.state: s_j}
-            _,loss,delta = self.sess.run([self.onlineQ.optimize_op,
-                                          self.onlineQ.loss_op,
-                                          self.onlineQ.delta],
-                                          feed_dict=feed_dict)
+            # self.onlineQ.update_fn(nextQ, predQ, a_j)
+            # feed_dict = {self.onlineQ.nextQ: nextQ, self.onlineQ.state: s_j,
+            #              self.onlineQ.actions: a_j}
+            # _,loss,delta = self.sess.run([self.onlineQ.optimize_op,
+            #                               self.onlineQ.loss_op,
+            #                               self.onlineQ.delta],
+            #                               feed_dict=feed_dict)
 
             if verbose:
                 print('move {} ep a_t: {} (mode {})'.format(
-                    move, a_t, self.sample_mode), end='')
-                print('loss= {}, r_t = {}'.format(loss, r_t))
+                    move, a_t, self.sample_mode), end=' ')
+                print('loss = {:3.3f} r_t = {}'.format(loss, r_t))
 
-            if do_break:
+            if terminal_move:
                 break
 
         return r_t, move
-
 
     def play(self):
         moves = 0
         self.board.refresh_orbs()
         self.board._select_random()
-        while self.board.selected is not None and moves<=self.n_moves:
-            time.sleep(0.25)
+        terminal_move = False
+        while not terminal_move:
+            time.sleep(self.board.sleep_time)
             moves += 1
             s_t = self.board.board_2_state()
-            feed_dict = {self.onlineQ.state: s_t}
-            a_t = self.sess.run(self.onlineQ.action_op, feed_dict=feed_dict)
+            a_t, Qpred = self.onlineQ(s_t)
+            print('Moving.. {}'.format(a_t))
 
-            _ = self.board.move_orb(a_t[0])
+            terminal_move, newpos = self.board.move_orb(a_t[0])
 
-        combos, n_cleared = self.eval_outcome()
-        return combos, n_cleared, moves
+        combos, _ = self.eval_outcome()
+        return combos, moves

@@ -13,11 +13,12 @@ The environment supports the following:
 - Implement basic movement, clearing, skyfall and cascade mechanics ( :heavy_check_mark: Sep 2, '17)
 - Implement a random agent and run experiments to generate baseline statistics ( :heavy_check_mark: Sep 2, '17)
 - Implement Deep Q Network learning agent (:heavy_check_mark: Sep 9 '17 )
-- Validate D-DQN implementation with OpenAI `gym` (:x: target: Sep 18 '17)
-- Perform time trials - moves/second, epochs/second (:x:)
-- Exceed random baseline performance with DQN agent ( :x: )
-- Implement dungeon floor progression with attacking and enemies ( :x: target: Oct '17 )
-- Integration with `gym` API/design ( :x: target: Dec '17 )
+
+----------------------
+During a long hiatus from this project there's been some developments in relational reinforcement learning (arxiv)[https://arxiv.org/pdf/1806.01830]. In addition, there's been the release and stabilization of TensorFlow Eager execution.
+The new plan is to implement an agent with a relational reinforcement module, and to translate the whole project to the tf.keras.Model pattern.
+
+I'm going to edit the main objective. Reward will be calculated as +10 for N combos, at which point the board terminates. -1 Reward will be given if the agent fails to reach N combos with M moves. +1 will be given for each additional combo, not counting broken combos. In other words, switching two orbs back and forth to make/break a combo will give +1 for the first match, and +0 the rest.
 
 #### Depends
 * numpy

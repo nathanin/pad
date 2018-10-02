@@ -1,1 +1,2 @@
-from .models import DuelingQ
+from .duelingq import DuelingQ
+from .q_rnn import DeepQRNN

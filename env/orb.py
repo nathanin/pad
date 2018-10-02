@@ -24,6 +24,7 @@ orbtypes = [
             'pink',
             'purple',
             'yellow',
+            'hidden',
             # 'jammer',
             ]
 
