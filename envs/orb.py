@@ -48,6 +48,7 @@ class Orb(object):
     def __init__(self, type=None, board_shape=[5,6], radius=35):
         ## Constants
         self.type = random.choice(orbtypes)
+        self.n_types = len(orbtypes)
         self.color = colors[self.type]
         self.type_code = typedict[self.type]
         self.position = None
