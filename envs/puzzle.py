@@ -13,13 +13,14 @@ move_count -- start at 1 and anneal towards 0 with more moves -- simulate time
 """
 
 class PAD(object):
-    def __init__(self, shape=[5,6], show=True, max_moves=50, sleep_time=0.25):
-        self.orb_size = 45
-        self.selected_dot = 15
+    def __init__(self, shape=[5,6], show=True, target=4, max_moves=50, sleep_time=0.25):
+        self.selected_dot = 15 
         self.shape = shape
         self.selected = None
         self.show = show
+        self.target = target
         self.sleep_time = sleep_time
+        self.orb_size = 35 # orb size in pixels; for drawing
         self.move_count = 1.0
         self.move_delta = 1.0 / max_moves
         ## Big choice: use np to hold orbs
@@ -34,7 +35,6 @@ class PAD(object):
             # pygame.display.flip()
         else:
             self._init_orbs()
-
 
         ## Perform the ghost iteration to get a neutral board
         show_hold = self.show
@@ -70,7 +70,9 @@ class PAD(object):
         self.size = [2*col*self.orb_size, 2*row*self.orb_size]
 
 
-    def _select_random(self):
+    def _select_random(self, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
         self.selected = np.random.choice(self.orbs.flatten())
         if self.show:
             self._highlight_selected()
@@ -264,25 +266,19 @@ class PAD(object):
         hold.update_position(position)
         self.selected.update_position(newpos)
 
-
     def move_orb(self, action, show_selected=True):
         # take care of legal moves somewhere else;
         # if we get here assume the move is legal;
         position = sr, sc = self.selected.position
         ## Update internal clock
         self.move_count -= self.move_delta
+
+        ## Set illegal move to noop
         if action not in self.selected.get_possible_moves(self):
-            ## This way only explicitly chosing 4 can terminate the turn
-            if action==4 or self.move_count<=0:
-                ## Deselect orb; Effectively ending the turn
-                self.selected = None
+            if self.move_count <= 0:
                 return True, position
             else:
-                ## Set illegal move to noop
-                if self.move_count <= 0:
-                    return True, position
-                else:
-                    return False, position
+                return False, position
 
         if action==0: # left
             newpos = [sr, sc-1]
@@ -297,7 +293,6 @@ class PAD(object):
 
         ## Do the swap
         hold = self.orbs[newpos[0], newpos[1]]
-
         self.orbs[newpos[0], newpos[1]] = self.selected
         self.orbs[position[0], position[1]] = hold
 
@@ -308,6 +303,11 @@ class PAD(object):
         if self.show:
             self.draw_board(show_selected=show_selected)
 
+        # Combo count break 
+        if self.eval_matches() >= self.target:
+            return True, newpos
+
+        # Move count break
         if self.move_count <= 0:
             return True, newpos
         else:
@@ -378,7 +378,9 @@ class PAD(object):
             time.sleep(self.sleep_time)
 
 
-    def refresh_orbs(self):
+    def refresh_orbs(self, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
         self.move_count = 1.0
         show_hold = self.show
         self.show = False
@@ -423,63 +425,8 @@ class PAD(object):
             selected = selected.flatten().reshape(1,np.prod(self.shape))
             state = np.hstack([state, selected])
         else:
-            # state = state.reshape(self.shape[0], self.shape[1])
             state = self.as_onehot(state)
-            # selected = selected.flatten().reshape(self.shape[0], self.shape[1])
             state = np.expand_dims(np.dstack([state, selected]), 0)
 
         return state
 
-
-    # def run(self):
-    #     self.screen = pygame.display.set_mode(self.size)
-    #     self.draw_board()
-    #     pygame.display.flip()
-    #     n_moves = 20
-    #     play = True
-    #
-    #     while 1:
-    #         for event in pygame.event.get():
-    #             if event.type == pygame.QUIT:
-    #                 sys.exit()
-    #             elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
-    #                 print('Resuming')
-    #                 play = True
-    #
-    #         while play:
-    #             self._select_random()
-    #             for _ in range(n_moves):
-    #                 # Sample from legal moves
-    #                 moves = self.selected.get_possible_moves(self)
-    #                 self.move_orb(direction=np.random.choice(moves))
-    #                 # self.draw_board()
-    #                 # time.sleep(0.25)
-    #
-    #             time.sleep(1)
-    #             self.selected = None
-    #             self.draw_board()
-    #             n_matches = self.eval_matches()
-    #             while n_matches > 0:
-    #                 self.display_matches()
-    #                 # time.sleep(0.5)
-    #                 self.clear_matches()
-    #                 # time.sleep(0.5)
-    #                 self.skyfall()
-    #                 # time.sleep(0.5)
-    #                 n_matches = self.eval_matches()
-    #
-    #             for event in pygame.event.get():
-    #                 print(event)
-    #                 if event.type == pygame.QUIT:
-    #                     sys.exit()
-    #                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
-    #                     ## TODO add keypress screen PAUSE
-    #                     print('Pausing')
-    #                     play = False
-
-
-# import board; x=board.Board(); x.run()
-
-# if __name__ == '__main__':
-#     x = Board()
-#     x.run()
