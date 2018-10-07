@@ -12,7 +12,7 @@ class DuelingQ(object):
     def __init__(self, board, action_dim, learning_rate, name='DuelingQ'):
         board_row, board_col = board.shape
         nonlin = tf.nn.relu
-        kernels = [64, 64, 64, 64]
+        kernels = [128, 256, 256, 512]
 
         with tf.variable_scope(name) as scope:
             ## input is number of orb types + 1 for selected
@@ -22,11 +22,12 @@ class DuelingQ(object):
             print('keep_prob: ', self.keep_prob.get_shape())
 
             ## Net definition
-            net = nonlin(conv(self.state, kernels[0], ksize=3, stride=2, var_scope='h1'))
+            net = nonlin(conv(self.state, kernels[0], ksize=(board_row, board_col), stride=1, var_scope='h1'))
+            net = nonlin(conv(net, kernels[0], ksize=(board_row, board_col), stride=1, var_scope='h1_1'))
             print('h1: ', net.get_shape())
-            net = nonlin(conv(net, kernels[1], ksize=2, stride=1, var_scope='h2'))
+            net = nonlin(conv(net, kernels[1], ksize=4, stride=2, var_scope='h2'))
             print('h2: ', net.get_shape())
-            net = nonlin(conv(net, kernels[2], ksize=2, stride=1, var_scope='h3'))
+            net = nonlin(conv(net, kernels[2], ksize=2, stride=2, var_scope='h3'))
             print('h3: ', net.get_shape())
             net = nonlin(conv(net, kernels[3], ksize=2, stride=1, var_scope='h4'))
             print('h4: ', net.get_shape())
@@ -37,6 +38,8 @@ class DuelingQ(object):
 
             ## Split advantage and value functions:
             net = nonlin(linear(net, 2048, var_scope='fork'))
+            net = nonlin(linear(net, 1024, var_scope='fork_1'))
+            net = nonlin(linear(net, 512, var_scope='fork_2'))
             adv_split, val_split = tf.split(net, 2, 1)
             # adv_split = tf.identity(net)
             # val_split = tf.identity(net)
@@ -52,7 +55,7 @@ class DuelingQ(object):
             val_split = nonlin(linear(val_split, action_dim, var_scope='val_action'))
             print('value: ', val_split.get_shape())
 
-            adv_mean = tf.reduce_mean(adv_split, 1, keep_dims=True)
+            adv_mean = tf.reduce_mean(adv_split, 1, keepdims=True)
             print('adv_mean: ', adv_mean.get_shape())
 
             ## Double stream -- put them back together
@@ -61,7 +64,7 @@ class DuelingQ(object):
 
 
             ## For predicting
-            self.actions = tf.placeholder(shape=[None],dtype=tf.int32)
+            self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
             print('actions: ', self.actions.get_shape())
             self.actions_onehot = tf.one_hot(self.actions, action_dim, dtype=tf.float32)
 

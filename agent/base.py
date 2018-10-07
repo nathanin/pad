@@ -41,7 +41,9 @@ class BaseAgent(object):
                 ## Restrict to legal actions
                 action_space = self.board.selected.get_possible_moves(self.board)
                 action_space.append(4)
-                a_t = np.random.choice(action_space)
+                a_t = np.random.multinomial(1, [0.2475]*4+[0.01])
+                a_t = np.argmax(a_t)
+                # a_t = np.random.choice(action_space)
 
                 # a_t = np.random.choice([a_t, a_t_legal])
             else:
@@ -110,6 +112,16 @@ class BaseAgent(object):
         ## Restore settings
         self.sample_mode = store_mode
         self.epsilon = store_epsilon
+
+        ##
+        # print('History itmes:')
+        # for item in self.history.memory.keys():
+        #     try:
+        #         print(item, self.history.memory[item][0].shape)
+        #         print(item, self.history.memory[item][0])
+        #     except:
+        #         print(item, self.history.memory[item][0])
+
         print('Done observing; Agent memory full')
 
 
@@ -128,7 +140,8 @@ class BaseAgent(object):
         if terminal_move:
             r_t, _ = self.eval_outcome()
         else:
-            r_t = 0
+            # r_t = 0
+            r_t = self.board.eval_matches()
 
         return r_t
 

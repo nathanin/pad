@@ -1,5 +1,7 @@
 import numpy as np
 import tensorflow as tf
+import time
+
 from .models import DuelingQ
 from .base import BaseAgent
 from .history import History
@@ -12,9 +14,9 @@ class DeepQAgent(BaseAgent):
         ## Some hyper params
         self.name = 'DeepQAgent'
         self.sample_mode = sample_mode
-        self.learning_rate = 0.00001
-        self.epsilon = 0.9
-        self.gamma = 0.8
+        self.learning_rate = 1e-6
+        self.epsilon = 0.99
+        self.gamma = 0.9
         self.history = History(capacity=memory)
         self.batch_size = batch_size
         self.global_step = 0
@@ -29,56 +31,6 @@ class DeepQAgent(BaseAgent):
         self.sess = tf.Session(config=self.config)
         self.sess.run(self.onlineQ.init_op)
         print('Agent ready')
-
-    # '''
-    # Populate a replay history by playing games and storing moves
-    # '''
-    # def observe(self, pause_time=0, verbose=False):
-    #     n_moves = self.n_moves
-    #
-    #     ## Do many runs to fill the memory
-    #     while self.history.n < self.history.capacity:
-    #
-    #         ## Iterate games
-    #         self.board.refresh_orbs()
-    #         self.board._select_random()
-    #         move = 0
-    #         total_reward = 0
-    #         previous_combo = 0
-    #         while self.board.selected is not None and move<=n_moves:
-    #             ## Feed history
-    #             move += 1
-    #             s_t = self.board.board_2_state()
-    #             feed_dict = {self.onlineQ.state: s_t}
-    #             a_t, Qpred = self.sess.run([self.onlineQ.action_op, self.onlineQ.Qpred],
-    #                 feed_dict=feed_dict)
-    #
-    #             ## Exploration -- in the beginning it will be very high
-    #             if np.random.rand(1)[0] < self.epsilon:
-    #                 a_t = np.random.choice(range(self.n_actions))
-    #                 ## Restrict to legal actions
-    #                 action_space = self.board.selected.get_possible_moves(self.board)
-    #                 a_t_legal = np.random.choice(action_space)
-    #
-    #                 # 1/2 chance to be selected from legal actions only
-    #                 a_t = np.random.choice([a_t, a_t_legal])
-    #             else:
-    #                 a_t = a_t[0]
-    #
-    #             ## Observe altered state(t+1)
-    #             illegal_move = self.board.move_orb(a_t)
-    #             s_t1 = self.board.board_2_state()
-    #
-    #             r_t, previous_combo, do_break = self._eval_reward(
-    #                 move, illegal_move, previous_combo)
-    #
-    #             self.history.store_state(s_t, a_t, r_t, s_t1, do_break)
-    #
-    #             if do_break:
-    #                 break
-    #
-    #     print('Done observing; Agent memory full')
-
 
 
     def train(self, update_iter=5, verbose=False):
@@ -97,26 +49,26 @@ class DeepQAgent(BaseAgent):
             move += 1
             self.global_step += 1
 
+            ## Make a move
             s_t = self.board.board_2_state()
-            feed_dict = {self.onlineQ.state: s_t}
-            a_t, Qpred = self.sess.run([self.onlineQ.action_op, self.onlineQ.Qpred],
-                feed_dict=feed_dict)
-
+            ## Implement the exploration policy
             if np.random.rand(1)[0] < self.epsilon:
-                a_t = np.random.choice(range(self.n_actions))
+                a_t = np.random.multinomial(1, [0.2475]*4+[0.01])
+                a_t = np.argmax(a_t)
+                # a_t = np.random.choice(range(self.n_actions))
                 ## Restrict to legal actions
-                action_space = self.board.selected.get_possible_moves(self.board)
-                a_t_legal = np.random.choice(action_space)
-                a_t = np.random.choice([a_t, a_t_legal])
+                # action_space = self.board.selected.get_possible_moves(self.board)
+                # a_t_legal = np.random.choice(action_space)
+                # a_t = np.random.choice([a_t, a_t_legal])
             else:
-                a_t = a_t[0]
+                a_t = self._sample_action(s_t, verbose=verbose)
 
-            illegal_move = self.board.move_orb(a_t)
+
+            ## Evaluate reward now, and get the next state
+            terminal_move, selected_pos= self.board.move_orb(a_t)
             s_t1 = self.board.board_2_state()
-            r_t, previous_combo, do_break = self._eval_reward(
-                move, illegal_move, previous_combo)
-
-            self.history.store_state(s_t, a_t, r_t, s_t1, do_break)
+            r_t = self._eval_reward(terminal_move, selected_pos)
+            self.history.store_state(s_t, a_t, r_t, s_t1, terminal_move)
 
             ## Minibatch update:
             # if self.global_step % update_iter == 0:
@@ -126,17 +78,19 @@ class DeepQAgent(BaseAgent):
             feed_dict = {self.onlineQ.state: s_j}
             q_j = self.sess.run(self.onlineQ.Qpred, feed_dict=feed_dict)
             feed_dict = {self.onlineQ.state: s_j1}
-            q_prime = self.sess.run(self.onlineQ.Qpred, feed_dict=feed_dict)
+            # q_prime = self.sess.run(self.onlineQ.Qpred, feed_dict=feed_dict)
 
-            nextQ = q_j
-            for idx, (a_jx, r_jx, is_end_j) in enumerate(zip(a_j, r_j, is_end)):
+            nextQ = [0]*self.batch_size
+            for idx, (r_jx, is_end_j) in enumerate(zip(r_j, is_end)):
                 if is_end_j:
-                    nextQ[idx, a_jx] = r_jx
+                    nextQ[idx] = r_jx
                 else:
-                    nextQ[idx, a_jx] = r_jx + self.gamma * np.max(q_prime[idx,:])
+                    nextQ[idx] = r_jx + self.gamma * q_j[idx, a_j[idx]]
 
             ## Update
-            feed_dict = {self.onlineQ.nextQ: nextQ, self.onlineQ.state: s_j}
+            feed_dict = {self.onlineQ.nextQ: nextQ,
+                         self.onlineQ.state: s_j,
+                         self.onlineQ.actions: a_j}
             _,loss,delta = self.sess.run([self.onlineQ.optimize_op,
                                           self.onlineQ.loss_op,
                                           self.onlineQ.delta],
@@ -144,10 +98,13 @@ class DeepQAgent(BaseAgent):
 
             if verbose:
                 print('move {} ep a_t: {} (mode {})'.format(
-                    move, a_t, self.sample_mode), end='')
+                    move, a_t, self.sample_mode), end=' ')
                 print('loss= {}, r_t = {}'.format(loss, r_t))
 
-            if do_break:
+            if terminal_move:
+                if verbose:
+                    print('moves: {} r_t = {} (lr: {}) (mode: {}) (end-turn {})'.format(
+                        move, r_t, self.learning_rate, self.sample_mode, terminal_move))
                 break
 
         return r_t, move

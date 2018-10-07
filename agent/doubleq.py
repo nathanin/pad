@@ -3,6 +3,7 @@ import tensorflow as tf
 from .models import DuelingQ
 from .base import BaseAgent
 from .history import History
+from .models.ops import updateTargetGraph, updateTarget
 
 class DoubleQAgent(BaseAgent):
     def __init__(self,
@@ -16,7 +17,7 @@ class DoubleQAgent(BaseAgent):
         ## Some hyper params
         self.name = 'Dueling-DoubleQAgent'
         self.sample_mode = sample_mode
-        self.learning_rate = 1e-9
+        self.learning_rate = 1e-4
         self.n_bootstrap = 50
         self.history = History(capacity=memory)
         self.batch_size = batch_size
@@ -32,9 +33,9 @@ class DoubleQAgent(BaseAgent):
             self.epsilon = 0.15
 
         print('Setting up Tensorflow')
-        self.targetQ = models.DuelingQ(self.board, self.n_actions,
+        self.targetQ = DuelingQ(self.board, self.n_actions,
             self.learning_rate, name='target')
-        self.onlineQ = models.DuelingQ(self.board, self.n_actions,
+        self.onlineQ = DuelingQ(self.board, self.n_actions,
             self.learning_rate, name='online')
         self.config = tf.ConfigProto()
         self.config.gpu_options.allow_growth = True
@@ -45,7 +46,7 @@ class DoubleQAgent(BaseAgent):
         self.sess.run(self.targetQ.init_op)
 
         trainables = tf.trainable_variables()
-        self.targetOps = models.updateTargetGraph(trainables, self.tau)
+        self.targetOps = updateTargetGraph(trainables, self.tau)
         print(self.targetOps)
 
         print('Agent ready')
@@ -115,7 +116,7 @@ class DoubleQAgent(BaseAgent):
             if self.global_step % self.update_iter == 0:
                 if verbose:
                     print('(updating)',
-                models.updateTarget(self.targetOps, self.sess))
+                updateTarget(self.targetOps, self.sess))
 
 
             if terminal_move:

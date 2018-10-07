@@ -8,7 +8,6 @@ import numpy as np
 import sys
 import time
 
-
 def control_loop(events):
     for event in events:
         if event.type == pygame.QUIT:
@@ -58,7 +57,7 @@ def train_loop(agent, n_steps=10000):
     moves = [0]
     print_iter = history_iter = 250
     anneal_iter = 5000
-    memory_iter = 10000
+    memory_iter = 5000
     loop_time = time.time()
     for step in range(n_steps):
         if agent.board.show:
@@ -101,28 +100,3 @@ def train_loop(agent, n_steps=10000):
 
         reward.append(r_step)
         moves.append(moves_step)
-
-
-# if __name__ == '__main__':
-#     shape = [5,6]
-#     moves = 100
-#     board = puzzle.Board(shape=shape, max_moves=moves, show=False)
-#
-#     agent = agents.DoubleQAgent(board,
-#         n_moves=moves,
-#         batch_size=512,
-#         memory=10000,
-#         sample_mode='e_greedy',
-#         reward_type='combo')
-#
-#     print('Max moves: ', agent.n_moves)
-#     agent.observe()
-#     train_loop(agent)
-#
-#     ## Replace board so we can watch some play
-#     board = puzzle.Board(shape=shape,
-#         max_moves=moves,
-#         show=True,
-#         sleep_time=0.05)
-#     agent.swap_board(board)
-#     run_loop(agent)

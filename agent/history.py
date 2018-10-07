@@ -52,7 +52,7 @@ class History(object):
 
     ''' remove the last (oldest) state '''
     def _pop_state(self):
-        for key in self.memory.iterkeys():
+        for key in self.memory.keys():
             self.memory[key].pop(0)
 
         self.n -= 1

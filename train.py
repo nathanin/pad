@@ -2,7 +2,7 @@ import numpy as np
 import time
 import actor
 from env.puzzle import PAD
-from agent import DeepQAgent
+from agent import DoubleQAgent, DeepQAgent
 
 shape = [5,6]
 moves = 100
@@ -12,8 +12,8 @@ print('board set up')
 print('setting up agent')
 agent = DeepQAgent(board,
     n_moves=moves,
-    batch_size=64,
-    memory=128,
+    batch_size=128,
+    memory=10000,
     sample_mode='e_greedy',
     reward_type='combo')
 print('agent set up')

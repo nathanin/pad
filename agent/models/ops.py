@@ -19,7 +19,10 @@ def clipped_error(x):
 def conv(features, kernel, ksize=4, stride=2, pad='SAME', var_scope='conv', dilation=None):
     with tf.variable_scope(var_scope) as scope:
         dim_in = features.get_shape().as_list()[-1]
-        weight_shape = [ksize, ksize, dim_in, kernel]
+        if isinstance(ksize, (list, tuple)):
+            weight_shape = [ksize[0], ksize[1], dim_in, kernel]
+        else:
+            weight_shape = [ksize, ksize, dim_in, kernel]
         weight = weight_variable(weight_shape, name='w')
         ## WHYY
         if dilation is not None:
@@ -51,8 +54,9 @@ def updateTargetGraph(tfVars, tau):
 
     total_vars = len(tfVars)
     op_holder = []
-    for idx,var in enumerate(tfVars[0:total_vars/2]):
-        op_holder.append(tfVars[idx+total_vars/2].assign((var.value()*tau) + ((1-tau)*tfVars[idx+total_vars/2].value())))
+    half_vars = int(total_vars/2)
+    for idx,var in enumerate(tfVars[0:half_vars]):
+        op_holder.append(tfVars[idx+half_vars].assign((var.value()*tau) + ((1-tau)*tfVars[idx+half_vars].value())))
     return op_holder
 
 def updateTarget(op_holder,sess):
