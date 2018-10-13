@@ -1,9 +1,10 @@
 '''
 Game board script
 '''
-import sys, pygame, time
+import sys, time
 import numpy as np
 import gym
+import cv2
 from gym import spaces
 
 from .orb import Orb
@@ -16,23 +17,16 @@ class PadEnv(gym.Env):
     metadata = {
         'render.modes': ['human'],
     }
-    def __init__(self, shape=[5,6], target=3, max_moves=1000, sleep_time=0.25):
+    def __init__(self, shape=[5,6], target=6, max_moves=200):
         super(PadEnv, self).__init__()
         self.shape = shape
         self.selected = None
         self.target = target
-        self.sleep_time = sleep_time
         self.move_count = 1.0
         self.move_delta = 1.0 / max_moves
         self.prev_max_combo = 0
-        self.target_reward = 10.
+        self.target_reward = 100.
         self.num_envs = 4
-
-        self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Box(low=0, high=6, 
-                                            shape=(self.shape[0], self.shape[1], 2), 
-                                            # shape=(np.prod(self.shape), 2), 
-                                            dtype=np.float32)
 
         self.orb_size = 35 # orb size in pixels; for drawing
         self.selected_dot = 15 
@@ -40,6 +34,17 @@ class PadEnv(gym.Env):
         self._init_orbs()
         print('Clearing initialized orbs')
         _ = self.reset() #Clear randomly drawn matches
+
+        initial_state = self.observe()
+        state_shape = initial_state.shape
+        print('state:', state_shape)
+
+        self.action_space = spaces.Discrete(4)
+        self.observation_space = spaces.Box(low=0, high=6, 
+                                            shape=(state_shape[0], state_shape[1], 2), 
+                                            # shape=(np.prod(self.shape), 2), 
+                                            dtype=np.float32)
+
         print('Environment ready')
 
     def step(self, action, show_selected=True):
@@ -54,27 +59,14 @@ class PadEnv(gym.Env):
             done (bool)
             info (dict) [<-- empty]
         """
-        # if isinstance(action, np.ndarray):
-        #     obs = []
-        #     rewards = []
-        #     dones = []
-        #     infos = []
-        #     for act in action:
-        #         ob, reward, done, info = self.step(act)
-        #         obs.append(ob)
-        #         rewards.append(reward)
-        #         dones.append(done)
-        #         infos.append(info)
-        #     dones = np.asarray(dones)
-        #     return obs, rewards, dones, infos
-
         ## Update internal clock
         self.move_count -= self.move_delta
 
         valid_actions = self.selected.get_possible_moves(self)
         # assert action in valid_actions, "Action {} Illegal action".format(action)
         if action not in valid_actions:
-            return self._eval_reward(invalid=True)
+            # return self._eval_reward(invalid=True) # Stop and return penalty
+            return self._eval_reward() # No action
 
         position = sr, sc = self.selected.position
 
@@ -117,7 +109,7 @@ class PadEnv(gym.Env):
 
         n = self.eval_matches(clear=True)
         while n > 0:
-            self.clear_matches(draw=False)
+            self.clear_matches()
             self.skyfall()
             n = self.eval_matches(clear=True)
         
@@ -126,11 +118,18 @@ class PadEnv(gym.Env):
         return self.observe()
 
     def _eval_reward(self, invalid=False):
+        """
+        Defines the reward for Actions
+        
+        :param invalid: Boolean indicating whether the previous action was invalid
+            invalid actions optionally terminate the episode
+        """
         reward = 0.0
         state = self.observe()
         if invalid:
             reward = -1.
             done = True
+            # print('STOPPED REWARD = {}'.format(reward))
             return state, reward, done, {}
 
         n_combos = self.eval_matches()
@@ -143,13 +142,16 @@ class PadEnv(gym.Env):
         if n_combos >= self.target:
             done = True
             reward = self.target_reward
-            print('Returning reward = {}'.format(reward))
-        elif n_combos > self.prev_max_combo:
-            reward = 1.
-            self.prev_max_combo = n_combos
+        # elif n_combos > self.prev_max_combo:  # For intermediate rewarding
+        #     reward = n_combos
+        #     self.prev_max_combo = n_combos
+        #     # print('Returning reward = {}'.format(reward))
         else:
             reward = 0.
+            # reward = n_combos
 
+        # if done:
+        #     print('DONE REWARD = {}'.format(reward))
         return state, reward, done, {}
             
     '''
@@ -343,7 +345,7 @@ class PadEnv(gym.Env):
         self.selected.update_position(newpos)
 
 
-    def clear_matches(self, draw=True):
+    def clear_matches(self):
         """
         Set matched to 'cleared'
         """
@@ -399,9 +401,9 @@ class PadEnv(gym.Env):
             state = np.stack([state, selected], axis=-1)
         else:
             state = state.reshape(self.shape[0], self.shape[1], 1)
-            # state = self._as_onehot(state)
             state = np.dstack([state, selected])
-            # state = np.expand_dims(state, 0)
+            state = cv2.resize(state, dsize=(0,0), fx=8, fy=8, 
+                               interpolation=cv2.INTER_NEAREST)
 
         return state
 
