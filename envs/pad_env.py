@@ -142,6 +142,7 @@ class PadEnv(gym.Env):
         if n_combos >= self.target:
             done = True
             reward = self.target_reward
+            print('Reached target reward!')
         # elif n_combos > self.prev_max_combo:  # For intermediate rewarding
         #     reward = n_combos
         #     self.prev_max_combo = n_combos
