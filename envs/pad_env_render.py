@@ -1,5 +1,6 @@
 from __future__ import print_function
 import sys
+import time
 import pygame
 import numpy as np
 
@@ -14,7 +15,7 @@ class PadEnvRender(PadEnv):
 
     :param orb_size: Size in pixels to draw each orb
     """
-    def __init__(self, shape=[5,6], target=3, max_moves=200, orb_size=30):
+    def __init__(self, shape=[5,6], orb_size=30):
         # Set up the drawing stuff first
         self.shape = shape
         self.orb_size = orb_size
@@ -22,23 +23,12 @@ class PadEnvRender(PadEnv):
         self.surface = self._draw_init()
         self.screen = pygame.display.set_mode(self.size)
 
-        super(PadEnvRender, self).__init__(shape=[5,6], target=3, max_moves=200)
+        super(PadEnvRender, self).__init__()
         
     def _draw_init(self):
         pygame.init()
         row, col = self.shape
         self.size = [3*col*self.orb_size, 3*row*self.orb_size]
-
-    def _highlight_selected(self):
-        """ Draw a gray circle to indicate the active (selected) orb """
-        if self.selected is None:
-            return
-        else:
-            sc, sr = self.selected.board_position
-            rad = self.selected_dot
-
-            pygame.draw.circle(self.screen, (245, 245, 245),
-                (sc, sr), rad, 0)
 
     def _display_matches(self):
         """ Draw a light/white-ish circle to indicate matched orbs """
@@ -52,11 +42,37 @@ class PadEnvRender(PadEnv):
 
         pygame.display.flip()
 
+    def _eval_reward(self, invalid=False, display=False):
+        if display:
+            self._display_matches()
+
+        return self._eval_reward_base(invalid=invalid)
+
+    def _highlight_selected(self):
+        """ Draw a gray circle to indicate the active (selected) orb """
+        if self.selected is None:
+            return
+        else:
+            sc, sr = self.selected.board_position
+            rad = self.selected_dot
+
+            pygame.draw.circle(self.screen, (245, 245, 245),
+                (sc, sr), rad, 0)
+
+    def step(self, action, show_selected=True):
+        obs, rew, done, info = self._step_core(action, show_selected=show_selected)
+        if done:
+            self.eval_matches(show=True)
+            time.sleep(1)
+        
+        return obs, rew, done, info
+
     def reset(self, seed=None):
         """ Reset PadEnv to random board state
 
         Optionally take a seed argument to replicate exact starting configs.
         """
+        time.sleep(1)
         if seed is not None:
             np.random.seed(seed)
         self.move_count = 1.0
@@ -74,14 +90,15 @@ class PadEnvRender(PadEnv):
 
         return self.observe()
 
-    def eval_matches(self, clear=False, reset=False):
+    def eval_matches(self, clear=False, reset=False, show=False):
         """ Evaluate and draw matches on board """
         self.combos = 0
         for orb in self.orbs.flatten():
             self._combo_search(orb)
         
         n_matches = self._aggregate_combos()
-        if not reset:
+
+        if show:
             self._display_matches()
 
         if not clear:

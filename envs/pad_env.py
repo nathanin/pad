@@ -17,7 +17,7 @@ class PadEnv(gym.Env):
     metadata = {
         'render.modes': ['human'],
     }
-    def __init__(self, shape=[5,6], target=6, max_moves=200):
+    def __init__(self, shape=[5,6], target=5, max_moves=50):
         super(PadEnv, self).__init__()
         self.shape = shape
         self.selected = None
@@ -25,7 +25,7 @@ class PadEnv(gym.Env):
         self.move_count = 1.0
         self.move_delta = 1.0 / max_moves
         self.prev_max_combo = 0
-        self.target_reward = 100.
+        self.target_reward = 1000.
         self.num_envs = 4
 
         self.orb_size = 35 # orb size in pixels; for drawing
@@ -47,7 +47,10 @@ class PadEnv(gym.Env):
 
         print('Environment ready')
 
-    def step(self, action, show_selected=True):
+    def step(self, action, show_selected=False):
+        return self._step_core(action, show_selected=show_selected)
+
+    def _step_core(self, action, show_selected=False):
         """ AKA. Move orb
 
         Input:
@@ -118,6 +121,9 @@ class PadEnv(gym.Env):
         return self.observe()
 
     def _eval_reward(self, invalid=False):
+        return self._eval_reward_base(invalid=invalid)
+
+    def _eval_reward_base(self, invalid=False):
         """
         Defines the reward for Actions
         
@@ -133,7 +139,7 @@ class PadEnv(gym.Env):
             return state, reward, done, {}
 
         n_combos = self.eval_matches()
-        if self.move_count <= 0:
+        if self.move_count <= self.move_delta:
             done = True
             reward = n_combos
         else:
@@ -142,14 +148,13 @@ class PadEnv(gym.Env):
         if n_combos >= self.target:
             done = True
             reward = self.target_reward
-            print('Reached target reward!')
-        # elif n_combos > self.prev_max_combo:  # For intermediate rewarding
-        #     reward = n_combos
-        #     self.prev_max_combo = n_combos
-        #     # print('Returning reward = {}'.format(reward))
+        elif n_combos > self.prev_max_combo:  # For intermediate rewarding
+            reward = n_combos*10.
+            self.prev_max_combo = n_combos
+            # print('Returning reward = {}'.format(reward))
         else:
-            reward = 0.
-            # reward = n_combos
+            # reward = 1.
+            reward = n_combos*5
 
         # if done:
         #     print('DONE REWARD = {}'.format(reward))

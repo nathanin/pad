@@ -34,8 +34,8 @@ def test(env_id, seed, policy):
     # else:
     #     env = PadEnvRender()
 
-    env = VecFrameStack(env, 4)
-    model = PPO2.load('./pad_ppo2.pkl', env)
+    env = VecFrameStack(env, 8)
+    model = PPO2.load('./pad_5combo_ppo2.pkl', env)
 
     while True:
         obs, done = env.reset(), False
@@ -48,6 +48,8 @@ def test(env_id, seed, policy):
             done = done.any()
             episode_rew += rew
             time.sleep(1/24.)
+            if done:
+                print('Episode reward:', rew)
 
 def main():
     """

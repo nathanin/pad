@@ -29,17 +29,18 @@ def train(env_id, num_timesteps, seed, policy):
     """
 
     env = Monitor(PadEnv(), './logs', allow_early_resets=True)
-    env = DummyVecEnv([lambda: env for _ in range(32)])
-    env = VecFrameStack(env, 4)
+    env = DummyVecEnv([lambda: env for _ in range(16)])
+    env = VecFrameStack(env, 8)
     policy = {'cnn': CnnPolicy, 'lstm': CnnLstmPolicy, 'lnlstm': CnnLnLstmPolicy, 'mlp': MlpPolicy}[policy]
     model = PPO2(policy=policy, env=env, n_steps=256, nminibatches=4, lam=0.95, gamma=0.99, noptepochs=4, 
                  ent_coef=.01, learning_rate=lambda f: f * 2.5e-4, cliprange=lambda f: f * 0.1, verbose=1)
+    # model = model.load('./pad_4combo_ppo2.pkl', env)
     try:
         model.learn(total_timesteps=num_timesteps)
     except KeyboardInterrupt:
         print('Keyboard Interrupted')
 
-    model.save('./pad_ppo2.pkl')
+    model.save('./pad_5combo_ppo2.pkl')
 
 
 def main():
